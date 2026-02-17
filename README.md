@@ -1,22 +1,7 @@
-
 <p align="center">
   <br/>
+  <img src="assets/banner.svg" alt="Acceleration Council" width="900"/>
   <br/>
-</p>
-
-<pre align="center">
-░█▀█░█▀▀░█▀▀░█▀▀░█░░░█▀▀░█▀▄░█▀█░▀█▀░▀█▀░█▀█░█▀█
-░█▀█░█░░░█░░░█▀▀░█░░░█▀▀░█▀▄░█▀█░░█░░░█░░█░█░█░█
-░▀░▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀░▀░░▀░░▀▀▀░▀▀▀░▀░▀
-░█▀▀░█▀█░█░█░█▀█░█▀▀░▀█▀░█░░
-░█░░░█░█░█░█░█░█░█░░░░█░░█░░
-░▀▀▀░▀▀▀░▀▀▀░▀░▀░▀▀▀░▀▀▀░▀▀▀
-</pre>
-
-<p align="center">
-  <strong>166 execution skills · 6 review councils · 20 workflows</strong>
-  <br/>
-  <em>The most comprehensive skill library for Claude Code</em>
 </p>
 
 <p align="center">
