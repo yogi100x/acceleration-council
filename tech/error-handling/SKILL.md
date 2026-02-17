@@ -1,64 +1,45 @@
----
-name: error-handling
-version: 2.0.0
-description: "When the user needs to design error handling strategies for applications. Also use when the user mentions 'error handling,' 'exception handling,' 'error boundaries,' 'retry strategy,' 'graceful degradation,' or 'error reporting.' This skill covers application error handling."
----
-
 # Error Handling
 
-You are an expert in application error handling design. Your goal is to create error handling systems that are informative, recoverable, and don't leak sensitive information.
-
----
+Design consistent error handling patterns across frontend, backend, and infrastructure layers.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing error handling patterns in the codebase
+2. Read monitoring setup for error tracking configuration
+
+## Decision Tree: Error Strategy
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Application architecture
-  ├─ Error tracking tools (Sentry, etc.)
-  ├─ User-facing error requirements
-  └─ Recovery requirements
+Where is the error?
+├── User input (validation)
+│   └── Return structured error with field-level messages
+│       → User can fix it. Be specific and helpful.
+├── Business logic (domain rules)
+│   └── Return domain error with explanation
+│       → User may be able to fix it. Explain what's wrong.
+├── External service (API, database)
+│   └── Retry if transient, fallback if persistent
+│       → User sees graceful degradation, not raw errors.
+├── Infrastructure (out of memory, disk full)
+│   └── Alert operations, serve error page
+│       → User sees "temporarily unavailable" message.
+└── Unknown / Unexpected
+    └── Log everything, alert, serve generic error
+        → User sees generic error. Team investigates.
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Error Classification
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Error Handling Strategy
-
-```
-START: Where does the error occur?
-
-├─ CLIENT-SIDE (React/browser)
-│  ├─ Error boundaries for component failures
-│  ├─ try/catch for async operations
-│  ├─ User-friendly error messages
-│  └─ Report to error tracking (Sentry)
-
-├─ API LAYER (request handling)
-│  ├─ Structured error responses (code, message, details)
-│  ├─ Input validation errors → 400 with field-level details
-│  ├─ Auth errors → 401/403 (no information leakage)
-│  └─ Server errors → 500 with correlation ID
-
-├─ BACKGROUND JOBS
-│  ├─ Retry with exponential backoff
-│  ├─ Dead letter queue for persistent failures
-│  ├─ Alert on repeated failures
-│  └─ Idempotent retry (no duplicate side effects)
-
-└─ EXTERNAL SERVICES (APIs, databases)
-   ├─ Circuit breaker pattern
-   ├─ Timeout on every call
-   ├─ Fallback/graceful degradation
-   └─ Retry with jitter for transient errors
-```
-
----
+| Category | HTTP Code | Retry? | User Message | Log Level |
+|----------|-----------|--------|-------------|-----------|
+| **Validation** | 400/422 | No | Specific field errors | WARN |
+| **Authentication** | 401 | No | "Please sign in" | INFO |
+| **Authorization** | 403 | No | "You don't have access" | WARN |
+| **Not found** | 404 | No | "Resource not found" | INFO |
+| **Rate limit** | 429 | Yes (after delay) | "Too many requests, try again" | WARN |
+| **Conflict** | 409 | No | Explain conflict | WARN |
+| **Server error** | 500 | Yes (with backoff) | "Something went wrong" | ERROR |
+| **Service unavailable** | 503 | Yes (with backoff) | "Temporarily unavailable" | ERROR |
 
 ## Error Response Format
 
@@ -66,81 +47,58 @@ START: Where does the error occur?
 {
   "error": {
     "code": "VALIDATION_ERROR",
-    "message": "Invalid input",
+    "message": "Please fix the following issues",
     "details": [
-      { "field": "email", "message": "Invalid email format" }
+      {
+        "field": "email",
+        "code": "INVALID_FORMAT",
+        "message": "Please enter a valid email address"
+      }
     ],
-    "correlation_id": "req_abc123"
+    "request_id": "req_abc123"
   }
 }
 ```
 
-### Error Categories
+## Frontend Error Boundaries
 
-| Category | HTTP Status | Retry? | User Action |
-|----------|------------|--------|-------------|
-| **Validation** | 400 | No | Fix input and retry |
-| **Authentication** | 401 | No | Login again |
-| **Authorization** | 403 | No | Contact admin |
-| **Not Found** | 404 | No | Check URL |
-| **Rate Limited** | 429 | Yes (after delay) | Wait and retry |
-| **Server Error** | 500 | Yes | Automatic retry or report |
-| **Service Unavailable** | 503 | Yes (with backoff) | Wait and retry |
+```
+Error boundary hierarchy:
+1. App-level boundary: catches unexpected errors, shows error page
+2. Route-level boundary: catches page errors, shows route-specific error UI
+3. Component-level boundary: catches component errors, shows fallback UI
+4. Data-fetching boundary: catches API errors, shows retry UI
 
-### Resilience Patterns
+Each level should:
+- Show appropriate UI (not raw error messages)
+- Provide recovery action (retry, go back, contact support)
+- Report to error tracking (Sentry)
+- Not expose internal details to users
+```
 
-| Pattern | When to Use | Implementation |
-|---------|-------------|----------------|
-| **Retry** | Transient failures | Exponential backoff with jitter |
-| **Circuit breaker** | Persistent failures | Open after N failures, half-open to test |
-| **Timeout** | Slow dependencies | Absolute timeout on every external call |
-| **Fallback** | Non-critical features | Graceful degradation with cached/default data |
-| **Bulkhead** | Isolation | Separate thread pools per dependency |
+## Anti-Patterns to Avoid
 
----
+- **T8: Catching and swallowing errors** — If you catch, log and handle. Never silently ignore.
+- **T9: Raw error messages to users** — Stack traces and internal errors are security leaks.
+- **T10: No error tracking** — You can't fix errors you don't know about.
+- **T11: Inconsistent error formats** — Every API should return the same error structure.
 
-## Anti-Pattern References
+## Quality Rubric (35 points)
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T24 | Swallowing errors | Silent failures, debugging nightmare |
-| T25 | Leaking stack traces | Security vulnerability |
-| T26 | No correlation IDs | Can't trace errors across services |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Consistency** | Uniform error format across all endpoints | Mostly consistent | Inconsistent |
+| **User experience** | Helpful messages with recovery actions | Generic but clear | Raw errors shown |
+| **Error tracking** | All errors reported with context | Key errors tracked | No tracking |
+| **Classification** | Errors categorized with appropriate handling | Some categorization | All treated the same |
+| **Retry logic** | Appropriate retry for transient errors | Basic retry | No retry |
+| **Boundary coverage** | Error boundaries at all levels | Some boundaries | No boundaries |
+| **Documentation** | Error codes documented with resolution steps | Some documentation | No error docs |
 
----
-
-## Quality Rubric
-
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **User messages** | Technical errors shown | Friendly messages | Contextual + actionable messages |
-| **API responses** | Inconsistent format | Structured errors | Typed errors with correlation IDs |
-| **Logging** | No error logging | Logged to console | Structured logs with context to error tracker |
-| **Recovery** | Manual restart | Basic retry | Automatic recovery with fallbacks |
-| **Monitoring** | No tracking | Error count alerts | Error budget tracking with trending |
-| **Security** | Stack traces exposed | Generic messages | Sanitized with safe error codes |
-| **Testing** | Happy path only | Some error cases | Comprehensive error scenario testing |
-
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Robust error handling | 21-27 = Gaps in coverage | <21 = Errors leak to users**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Parallel** | monitoring-setup | Errors feed monitoring |
-| **Parallel** | background-job-design | Job retry/failure handling |
-| **Review** | council-review (tech) | Validates error handling |
-
----
-
-## Output Checklist
-
-- [ ] Error response format standardized across all endpoints
-- [ ] Client-side error boundaries in place
-- [ ] Correlation IDs for tracing across services
-- [ ] Retry strategy for transient failures
-- [ ] Circuit breakers for external dependencies
-- [ ] No sensitive information in error responses
-- [ ] Error tracking configured (Sentry or equivalent)
+- **Upstream:** `api-design` (error response format), `system-architecture` (error boundaries)
+- **Downstream:** `monitoring-setup` (error alerting), `testing-strategy` (error path testing)
+- **Council:** Submit to `council-review` for error handling review

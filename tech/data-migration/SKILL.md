@@ -1,127 +1,112 @@
----
-name: data-migration
-version: 2.0.0
-description: "When the user needs to migrate data between systems, schemas, or databases. Also use when the user mentions 'data migration,' 'database migration,' 'schema migration,' 'data transfer,' or 'ETL.' This skill covers data migration planning."
----
-
 # Data Migration
 
-You are an expert in data migration. Your goal is to plan and execute data migrations that are safe, complete, and reversible.
-
----
+Plan and execute safe database migrations with zero downtime and rollback capability.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing migration patterns and conventions
+2. Read database schema documentation
+
+## Decision Tree: Migration Type
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Source and target systems
-  ├─ Data volumes and types
-  ├─ Downtime tolerance
-  └─ Rollback requirements
+What kind of change?
+├── Add column (nullable or with default)
+│   └── Safe: Deploy migration, then code changes
+├── Add column (NOT NULL, no default)
+│   └── Multi-step: Add nullable → backfill → add constraint
+├── Remove column
+│   └── Multi-step: Stop reading → stop writing → drop column
+├── Rename column
+│   └── Multi-step: Add new → copy data → update code → drop old
+├── Add table
+│   └── Safe: Deploy migration, then code changes
+├── Drop table
+│   └── Multi-step: Stop all references → backup → drop
+├── Change data type
+│   └── Multi-step: Add new column → migrate data → swap → drop old
+└── Large data backfill
+    └── Batched: Process in chunks, resumable, monitored
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Safe Migration Pattern
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Migration Strategy
+### The Expand-Contract Pattern
 
 ```
-START: What kind of migration?
+Phase 1: EXPAND (backward compatible)
+  - Add new column/table
+  - Deploy code that writes to both old and new
+  - Backfill existing data
 
-├─ SCHEMA MIGRATION (same DB, new structure)
-│  ├─ Backward-compatible: Add column → migrate data → remove old
-│  ├─ Zero-downtime: expand-contract pattern
-│  └─ Key: Never break running application
+Phase 2: MIGRATE (transition)
+  - Deploy code that reads from new
+  - Verify data consistency
+  - Monitor for issues
 
-├─ DATABASE MIGRATION (different DB engine)
-│  ├─ Dual-write during transition
-│  ├─ Shadow reads for validation
-│  ├─ Gradual traffic shift
-│  └─ Key: Data consistency verification
-
-├─ SYSTEM MIGRATION (new service/vendor)
-│  ├─ API adapter pattern
-│  ├─ Feature flag for gradual rollout
-│  ├─ Parallel running for validation
-│  └─ Key: Rollback capability at every step
-
-└─ DATA IMPORT (one-time bulk load)
-   ├─ Validate → Transform → Load → Verify
-   ├─ Idempotent processing (rerun safe)
-   └─ Key: Data quality checks, error handling
+Phase 3: CONTRACT (cleanup)
+  - Deploy code that stops writing to old
+  - Drop old column/table
+  - Clean up migration code
 ```
 
----
+### Backfill Strategy
 
-## Migration Phases
+```sql
+-- Batched backfill (safe for large tables)
+DO $$
+DECLARE
+  batch_size INT := 1000;
+  rows_updated INT;
+BEGIN
+  LOOP
+    UPDATE target_table
+    SET new_column = computed_value
+    WHERE new_column IS NULL
+    LIMIT batch_size;
 
-| Phase | Activities | Gate |
-|-------|-----------|------|
-| **Plan** | Map source to target, identify transformations, estimate size | Plan reviewed |
-| **Prepare** | Create scripts, set up staging, define validation | Scripts tested |
-| **Test** | Run on staging with production-like data | All validations pass |
-| **Execute** | Run migration with monitoring | Data verified |
-| **Validate** | Row counts, checksums, spot checks, functional tests | Validation complete |
-| **Cleanup** | Remove old data/schema, update documentation | Cleanup complete |
+    GET DIAGNOSTICS rows_updated = ROW_COUNT;
+    EXIT WHEN rows_updated = 0;
 
-### Expand-Contract Pattern (Zero-Downtime)
-
+    PERFORM pg_sleep(0.1); -- Reduce lock pressure
+    RAISE NOTICE 'Updated % rows', rows_updated;
+  END LOOP;
+END $$;
 ```
-Phase 1: EXPAND — Add new column/table (backward compatible)
-Phase 2: MIGRATE — Copy data, dual-write to old + new
-Phase 3: SWITCH — Application reads from new
-Phase 4: CONTRACT — Remove old column/table
-```
 
----
+## Migration Safety Checklist
 
-## Anti-Pattern References
+- [ ] Migration is backward compatible (old code works with new schema)
+- [ ] Migration is idempotent (safe to run twice)
+- [ ] Rollback plan documented and tested
+- [ ] Large tables: migration won't lock table for extended period
+- [ ] Backfill runs in batches (not single UPDATE)
+- [ ] Migration tested on staging with production-like data volume
+- [ ] Monitoring in place for migration progress and errors
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T19 | Big bang migration | All-or-nothing risk |
-| T20 | No rollback plan | Can't undo failed migration |
-| T7 | No validation | Data corruption goes undetected |
+## Anti-Patterns to Avoid
 
----
+- **T2: Breaking schema change without expand-contract** — Will cause downtime during deploy.
+- **T5: Unbatched backfills on large tables** — Will lock the table and block reads/writes.
+- **T8: No rollback plan** — Every migration needs a documented rollback procedure.
+- **T9: Testing only on empty databases** — Test with production-scale data volumes.
 
-## Quality Rubric
+## Quality Rubric (35 points)
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Planning** | Ad hoc | Written plan | Detailed plan with rollback at each step |
-| **Testing** | Tested in production | Tested on staging | Production-like data, tested multiple times |
-| **Validation** | Visual spot check | Row counts match | Checksums + functional tests + edge cases |
-| **Rollback** | No rollback | Manual rollback | Automated rollback with triggers |
-| **Downtime** | Extended downtime | Scheduled maintenance | Zero downtime |
-| **Monitoring** | No monitoring | Basic logging | Real-time progress + error tracking |
-| **Communication** | No notification | Team informed | Stakeholders notified with status updates |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Backward compatibility** | All migrations are backward compatible | Most are | Breaking changes |
+| **Rollback plan** | Tested rollback for every migration | Rollback documented | No rollback |
+| **Zero downtime** | No table locks, batched operations | Brief locks acceptable | Extended downtime |
+| **Data validation** | Pre and post migration data verification | Basic checks | No validation |
+| **Monitoring** | Progress tracking, error alerting during migration | Some monitoring | No monitoring |
+| **Testing** | Tested on production-scale data | Tested on staging | Tested on dev only |
+| **Documentation** | Migration plan with steps, timing, and rollback | Basic documentation | No documentation |
 
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Safe migration | 21-27 = Needs review | <21 = Data loss risk**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | database-schema | Schema changes trigger migrations |
-| **Parallel** | monitoring-setup | Monitor migration progress |
-| **Review** | council-review (tech) | Validates migration plan |
-
----
-
-## Output Checklist
-
-- [ ] Source-to-target mapping documented
-- [ ] Data transformations specified
-- [ ] Migration scripts written and tested on staging
-- [ ] Validation criteria defined (row counts, checksums)
-- [ ] Rollback plan documented and tested
-- [ ] Communication plan for stakeholders
-- [ ] Post-migration cleanup scheduled
+- **Upstream:** `database-schema` (schema design), `system-architecture` (deployment strategy)
+- **Downstream:** `monitoring-setup` (migration monitoring)
+- **Council:** Submit to `council-review` for migration review

@@ -1,151 +1,85 @@
----
-name: documentation
-version: 2.0.0
-description: "When the user needs to create technical documentation for APIs, systems, or processes. Also use when the user mentions 'documentation,' 'API docs,' 'README,' 'developer guide,' 'architecture docs,' or 'runbook.' This skill covers technical documentation."
----
-
 # Documentation
 
-You are an expert in technical documentation. Your goal is to create documentation that developers actually read and maintain.
-
----
+Create and maintain technical documentation that helps developers understand and contribute to the codebase.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
-
-```
-Read: .claude/tech-context.md (if exists)
-  ├─ Documentation tools and hosting
-  ├─ Target audience
-  ├─ Existing documentation
-  └─ Documentation gaps
-```
-
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
+1. Read existing documentation structure
+2. Read `.claude/product-marketing-context.md` for audience and scope
 
 ## Decision Tree: Documentation Type
 
 ```
-START: Who is the audience?
-
-├─ NEW DEVELOPERS (onboarding)
-│  ├─ Getting Started guide
-│  ├─ Architecture overview
-│  ├─ Development setup (copy-pasteable commands)
-│  └─ Key: Works on first try, no assumed knowledge
-
-├─ API CONSUMERS (external developers)
-│  ├─ API reference (auto-generated from spec)
-│  ├─ Quick start guide
-│  ├─ Code examples in multiple languages
-│  └─ Key: Working examples, authentication guide
-
-├─ TEAM (internal reference)
-│  ├─ Architecture Decision Records (ADRs)
-│  ├─ Runbooks for operations
-│  ├─ Incident response playbooks
-│  └─ Key: Findable, up-to-date, actionable
-
-└─ USERS (product documentation)
-   ├─ How-to guides (task-oriented)
-   ├─ Tutorials (learning-oriented)
-   ├─ Reference (information-oriented)
-   └─ Key: Task-focused, searchable
+What needs documenting?
+├── Getting started (new developer)
+│   └── README: Prerequisites, install, run, key concepts
+├── Architecture (understanding the system)
+│   └── ADRs, system diagrams, data flow, module descriptions
+├── API (consuming the API)
+│   └── OpenAPI spec, endpoint reference, authentication, examples
+├── Operations (running in production)
+│   └── Runbooks, deployment guide, monitoring, incident response
+├── Contributing (making changes)
+│   └── Code conventions, PR process, testing requirements
+└── End user (using the product)
+    └── User guides, FAQ, tutorials, API reference
 ```
 
----
+## Documentation Structure
 
-## Documentation Framework (Diátaxis)
-
-| Type | Purpose | Structure |
-|------|---------|-----------|
-| **Tutorial** | Learning | Step-by-step, building something real |
-| **How-to** | Problem-solving | Specific task, assumes knowledge |
-| **Reference** | Information | Accurate, complete, structured |
-| **Explanation** | Understanding | Context, background, concepts |
-
-### README Template
-
-```markdown
-# Project Name
-One-line description.
-
-## Quick Start
-[Copy-pasteable commands to get running]
-
-## Architecture
-[High-level diagram and description]
-
-## Development
-[Setup, commands, workflow]
-
-## Deployment
-[How to deploy]
-
-## Contributing
-[How to contribute]
+```
+docs/
+├── README.md              # Quick start, project overview
+├── CONVENTIONS.md          # Code style, patterns, naming
+├── DATABASE.md             # Schema reference, migrations
+├── TROUBLESHOOTING.md      # Common issues and solutions
+├── AUTH_PATTERNS.md         # Authentication/authorization guide
+├── DEPLOYMENT_GUIDE.md      # Deployment procedures
+├── API.md                   # API reference (or auto-generated)
+└── internal_docs/           # Working documents, design docs
 ```
 
-### ADR (Architecture Decision Record) Template
+## Documentation Quality Principles
 
-```markdown
-# ADR-NNN: [Decision Title]
-**Status:** Proposed / Accepted / Deprecated
-**Date:** YYYY-MM-DD
-**Context:** [Why we need to make this decision]
-**Decision:** [What we decided]
-**Consequences:** [What changes as a result]
-```
+| Principle | Implementation |
+|-----------|---------------|
+| **Current** | Update docs when code changes. Stale docs are worse than no docs. |
+| **Findable** | Clear navigation, search-friendly, linked from relevant code |
+| **Scannable** | Headers, tables, code blocks. Don't write essays. |
+| **Actionable** | Every doc answers "what do I do?" not just "what is this?" |
+| **Tested** | Code examples should be runnable. Test them in CI if possible. |
+| **Audience-aware** | Write for the reader, not the writer. New developer vs expert. |
 
----
+## What NOT to Document
 
-## Anti-Pattern References
+- Implementation details that change frequently (read the code instead)
+- Obvious code (don't add `// increment counter` above `counter++`)
+- Information available in git history (use `git blame` for "why was this changed")
+- Aspirational architecture (document what IS, not what you wish it was)
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T29 | No documentation | Tribal knowledge, onboarding bottleneck |
-| T30 | Outdated documentation | Worse than no docs (misleading) |
-| T31 | Documentation not near code | Never found, never updated |
+## Anti-Patterns to Avoid
 
----
+- **T12: No documentation** — At minimum: README, getting started, key architectural decisions.
+- **T13: Documentation that duplicates code** — Document the WHY, not the WHAT. Code shows what.
+- **T14: Unmaintained docs** — Outdated docs mislead. Better to delete than leave stale.
+- **T15: Documentation as afterthought** — Write docs alongside code, not after.
 
-## Quality Rubric
+## Quality Rubric (35 points)
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Completeness** | Missing key docs | Major topics covered | Comprehensive per Diátaxis |
-| **Accuracy** | Outdated | Mostly current | Verified with CI checks |
-| **Findability** | Random files | Organized structure | Searchable, linked, indexed |
-| **Examples** | No examples | Some examples | Working, copy-pasteable examples |
-| **Maintenance** | Never updated | Updated occasionally | Updated on every change, reviewed quarterly |
-| **Onboarding** | No getting started | Basic setup | New dev productive in <1 day |
-| **API docs** | No docs | Basic endpoint list | Auto-generated with examples |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Coverage** | All key areas documented (start, architecture, API, ops) | Key areas covered | README only |
+| **Accuracy** | All docs match current code | Mostly accurate | Outdated |
+| **Findability** | Clear structure, cross-linked, searchable | Some organization | Scattered files |
+| **Onboarding** | New dev productive in <1 day | <1 week | Multi-week ramp-up |
+| **Maintainability** | Docs updated with code changes, review in PRs | Occasionally updated | Never updated |
+| **Examples** | Runnable code examples for key patterns | Some examples | No examples |
+| **Audience fit** | Tailored to reader level (beginner vs expert) | One level | Too technical or too basic |
 
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Developer-friendly | 21-27 = Has gaps | <21 = Documentation debt**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | api-design | API spec generates reference docs |
-| **Parallel** | code-review-checklist | Docs reviewed with code |
-| **Review** | council-review (tech) | Validates documentation |
-
----
-
-## Output Checklist
-
-- [ ] README with quick start (works on first try)
-- [ ] Architecture overview with diagram
-- [ ] API documentation (auto-generated if possible)
-- [ ] Development setup guide
-- [ ] Key ADRs documented
-- [ ] Runbooks for operational tasks
-- [ ] Documentation is near the code it describes
+- **Upstream:** All skills produce artifacts that should be documented
+- **Downstream:** Enables all other skills by providing context
+- **Council:** Submit to `council-review` for documentation review

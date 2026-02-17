@@ -1,143 +1,112 @@
----
-name: code-review-checklist
-version: 2.0.0
-description: "When the user needs a code review checklist or wants to improve code review practices. Also use when the user mentions 'code review,' 'PR review,' 'review checklist,' 'code quality,' or 'review process.' This skill covers code review best practices."
----
-
 # Code Review Checklist
 
-You are an expert in code review practices. Your goal is to help teams conduct effective, efficient code reviews that catch real issues without becoming bottlenecks.
-
----
+Systematic code review process that catches bugs, enforces standards, and shares knowledge.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing code conventions and patterns
+2. Read `.claude/product-marketing-context.md` for quality standards
+
+## Decision Tree: Review Depth
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Team size and review process
-  ├─ Code standards and conventions
-  ├─ Common issue patterns
-  └─ CI/CD checks available
+What's the PR size?
+├── Small (<50 lines, single concern)
+│   └── Quick review: correctness, style, tests
+├── Medium (50-300 lines, 1-3 files)
+│   └── Standard review: full checklist below
+├── Large (300+ lines, many files)
+│   └── Request split into smaller PRs, or deep review with extra time
+└── Critical (auth, billing, data migration)
+    └── Double review: two reviewers, security-focused
 ```
-
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Review Focus
-
-```
-START: What type of change?
-
-├─ NEW FEATURE
-│  ├─ Architecture: Does it fit the existing patterns?
-│  ├─ Tests: Are critical paths tested?
-│  ├─ Security: Any new attack surfaces?
-│  └─ Key: Design before implementation details
-
-├─ BUG FIX
-│  ├─ Root cause: Is the actual cause fixed (not symptom)?
-│  ├─ Test: Is there a test that would have caught this?
-│  ├─ Scope: Does the fix have unintended side effects?
-│  └─ Key: Regression test included
-
-├─ REFACTORING
-│  ├─ Behavior: Is behavior preserved? (tests pass)
-│  ├─ Scope: Is it focused (not mixed with features)?
-│  └─ Key: No behavior changes, only structural
-
-├─ DEPENDENCY UPDATE
-│  ├─ Breaking changes: Are API changes handled?
-│  ├─ Security: Is this a security update?
-│  └─ Key: Changelog reviewed, tests pass
-
-└─ CONFIGURATION
-   ├─ Secrets: No hardcoded secrets?
-   ├─ Environment: Works in all environments?
-   └─ Key: Tested in staging
-```
-
----
 
 ## Review Checklist
 
-### Always Check (Every PR)
+### Correctness
+- [ ] Logic is correct for all input cases
+- [ ] Edge cases handled (null, empty, boundary values)
+- [ ] Error handling is appropriate (not swallowed, not over-caught)
+- [ ] Race conditions considered (concurrent access, async operations)
+- [ ] Data integrity maintained (transactions where needed)
 
-| Category | Checks |
-|----------|--------|
-| **Correctness** | Does it do what it claims? Edge cases handled? |
-| **Security** | Input validation, auth checks, no secrets in code |
-| **Testing** | New tests for new behavior, existing tests pass |
-| **Naming** | Clear, consistent, follows conventions |
-| **Error handling** | Errors caught, user-friendly messages, logged |
-| **Performance** | No N+1 queries, unnecessary re-renders, missing indexes |
+### Security
+- [ ] No hardcoded secrets or credentials
+- [ ] Input validation at trust boundaries
+- [ ] Authorization checks on all protected resources
+- [ ] No SQL injection, XSS, or CSRF vulnerabilities
+- [ ] Sensitive data not logged or exposed in errors
 
-### Sometimes Check (Large PRs, New Patterns)
+### Performance
+- [ ] No N+1 queries
+- [ ] Database queries have appropriate indexes
+- [ ] No unbounded list queries (pagination)
+- [ ] Heavy operations offloaded to background jobs
+- [ ] No unnecessary re-renders (React)
 
-| Category | Checks |
-|----------|--------|
-| **Architecture** | Fits existing patterns, appropriate abstraction level |
-| **Types** | TypeScript types correct, no `any` |
-| **Accessibility** | ARIA labels, keyboard navigation, color contrast |
-| **Documentation** | Comments for non-obvious logic, README updates |
+### Maintainability
+- [ ] Code is readable without comments (self-documenting)
+- [ ] Functions/methods have single responsibility
+- [ ] No code duplication (DRY, but not premature abstraction)
+- [ ] Naming is clear and consistent
+- [ ] Follows existing codebase conventions
 
-### Review Etiquette
+### Testing
+- [ ] New code has tests
+- [ ] Tests cover happy path and error paths
+- [ ] Tests are independent and deterministic
+- [ ] No testing of implementation details
+
+### Documentation
+- [ ] Complex logic has inline comments explaining WHY
+- [ ] Public APIs have documentation
+- [ ] Breaking changes documented in PR description
+- [ ] Migration guide for breaking changes
+
+## Review Etiquette
 
 | Do | Don't |
 |----|-------|
-| Ask questions, don't make demands | "This is wrong" — instead "Why this approach over X?" |
-| Distinguish nitpicks from blockers | Block on style preferences |
-| Approve with minor suggestions | Hold approval for non-blocking feedback |
-| Review within 24 hours | Let PRs sit for days |
-| Focus on the code, not the person | Make it personal |
+| Ask questions ("Why did you choose...?") | Make demands ("Change this to...") |
+| Suggest alternatives with reasoning | Block on style preferences |
+| Distinguish blocking vs non-blocking feedback | Leave vague comments ("This could be better") |
+| Acknowledge good work | Only point out problems |
+| Review promptly (<24 hours) | Let PRs sit for days |
 
----
+## Feedback Classification
 
-## Anti-Pattern References
+```
+Use prefixes to classify feedback:
+  [blocking] Must fix before merge
+  [suggestion] Consider this improvement
+  [nit] Minor style/formatting (non-blocking)
+  [question] Seeking understanding
+  [praise] Calling out good work
+```
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T32 | Rubber-stamp reviews | Bugs and security issues missed |
-| T33 | Blocking on style | Slow velocity, team frustration |
-| T34 | Review too late | Expensive rework |
+## Anti-Patterns to Avoid
 
----
+- **T1: Rubber-stamp reviews** — Actually read the code. Fast approvals miss bugs.
+- **T4: Bikeshedding** — Don't spend 30 minutes debating variable names. Focus on logic and architecture.
+- **T7: Gatekeeping** — Reviews should enable shipping, not block it.
+- **T12: No review for "small changes"** — Small changes cause big outages. Always review.
 
-## Quality Rubric
+## Quality Rubric (35 points)
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Thoroughness** | Rubber stamp | Standard checklist | Contextual review per change type |
-| **Speed** | Days to review | Within 24 hours | Within 4 hours |
-| **Feedback quality** | Vague comments | Specific suggestions | Actionable with alternatives |
-| **Security focus** | Not checked | Basic review | Systematic security review |
-| **Consistency** | Reviewer-dependent | Checklist used | Automated + human review |
-| **Knowledge sharing** | No context | Comments explain why | Reviews teach and improve team |
-| **Automation** | All manual | Linting in CI | Automated checks + focused human review |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Thoroughness** | All checklist items verified | Key items checked | Cursory glance |
+| **Feedback quality** | Specific, actionable, classified by priority | Somewhat specific | Vague or unhelpful |
+| **Turnaround** | <24 hours, <4 hours for urgent | <48 hours | Multi-day delays |
+| **Knowledge sharing** | Explains reasoning, teaches patterns | Some teaching | Directives only |
+| **Consistency** | Same standards applied to all PRs | Mostly consistent | Varies by reviewer |
+| **Risk awareness** | Extra scrutiny on critical paths | Some awareness | Same depth for all |
+| **Follow-up** | Re-review after changes, verify resolution | Some follow-up | Approve without re-review |
 
-**Score: /35. Ship at 28+.**
-
----
+**28+ = High-quality review process | 21-27 = Needs consistency | <21 = Reviews not adding value**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Parallel** | testing-strategy | Tests validate PR correctness |
-| **Parallel** | documentation | Doc updates reviewed with code |
-| **Review** | council-review (tech) | Meta-review of review process |
-
----
-
-## Output Checklist
-
-- [ ] Review checklist defined and accessible to team
-- [ ] Review expectations set (turnaround time, blocking criteria)
-- [ ] Automated checks handle style/formatting
-- [ ] Human review focuses on logic, security, architecture
-- [ ] Review feedback is constructive and actionable
-- [ ] Process periodically reviewed and improved
+- **Upstream:** `testing-strategy` (tests in PRs), `documentation` (docs in PRs)
+- **Parallel:** All tech skills define what to look for in reviews
+- **Council:** Complex PRs can be submitted to `council-review` for deep review

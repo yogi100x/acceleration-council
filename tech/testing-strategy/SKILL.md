@@ -1,142 +1,106 @@
----
-name: testing-strategy
-version: 2.0.0
-description: "When the user needs to design a testing strategy for an application. Also use when the user mentions 'testing strategy,' 'test pyramid,' 'unit tests,' 'integration tests,' 'E2E tests,' or 'test coverage.' This skill covers testing approach design."
----
-
 # Testing Strategy
 
-You are an expert in software testing strategy. Your goal is to design testing approaches that maximize confidence while minimizing maintenance burden.
-
----
+Design comprehensive testing strategies covering unit, integration, and end-to-end tests.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing test patterns and coverage
+2. Read `.claude/product-marketing-context.md` for critical user flows
+
+## Decision Tree: What to Test
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Application architecture
-  ├─ Current test coverage
-  ├─ Testing tools and frameworks
-  └─ CI/CD pipeline
+What level of testing?
+├── Unit tests (isolated logic)
+│   └── Business logic, utility functions, data transformations
+│       → Fast, many, cheap. Mock external dependencies.
+├── Integration tests (component interactions)
+│   └── API routes + database, service interactions
+│       → Medium speed, test real integrations. Mock external APIs.
+├── E2E tests (full user flows)
+│   └── Critical paths: signup, purchase, core workflows
+│       → Slow, few, expensive. Test the most important flows.
+└── Other
+    ├── Performance tests → Load testing, stress testing
+    ├── Security tests → Penetration testing, vulnerability scanning
+    └── Visual regression → Screenshot comparison
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Testing Approach
+## The Testing Pyramid
 
 ```
-START: What are you testing?
-
-├─ BUSINESS LOGIC (pure functions, calculations)
-│  ├─ Unit tests (fast, isolated)
-│  ├─ Property-based testing for edge cases
-│  └─ Coverage target: 90%+ for critical paths
-
-├─ API ENDPOINTS (request/response)
-│  ├─ Integration tests with real database
-│  ├─ Test auth, validation, happy + error paths
-│  └─ Coverage: All endpoints, all error codes
-
-├─ UI COMPONENTS (React, etc.)
-│  ├─ Component tests (Testing Library)
-│  ├─ Visual regression tests (optional)
-│  └─ Focus: User interactions, not implementation
-
-├─ USER FLOWS (end-to-end)
-│  ├─ E2E tests (Playwright)
-│  ├─ Critical paths only (signup, purchase, core flow)
-│  └─ Keep minimal: 10-20 tests max
-
-└─ INFRASTRUCTURE (deployment, scaling)
-   ├─ Smoke tests post-deploy
-   ├─ Health check endpoints
-   └─ Synthetic monitoring
+        /  E2E   \     5-10 tests (critical paths)
+       /  (slow)  \
+      / Integration \   20-50 tests (API + DB)
+     /   (medium)    \
+    /    Unit tests    \ 100+ tests (business logic)
+   /     (fast)         \
 ```
 
----
+**Not the inverted pyramid:** Don't have more E2E tests than unit tests. E2E is for confidence, not coverage.
 
-## Test Pyramid
+## What to Test (Priority Order)
 
+| Priority | Test Target | Method | Coverage Goal |
+|----------|------------|--------|--------------|
+| **P0** | Authentication flows | E2E | 100% of auth paths |
+| **P0** | Payment/billing | Integration + E2E | 100% of payment paths |
+| **P1** | Core user workflows | E2E | Top 5 user journeys |
+| **P1** | Business logic | Unit | >80% of domain logic |
+| **P1** | API endpoints | Integration | All endpoints |
+| **P2** | Error handling | Unit + Integration | Error paths |
+| **P2** | Edge cases | Unit | Boundary conditions |
+| **P3** | UI components | Unit (snapshot) | Key components |
+| **P3** | Performance | Load test | Key endpoints |
+
+## Test Design Patterns
+
+### Arrange-Act-Assert
 ```
-         /  E2E  \          ← Few, slow, high confidence
-        / Integration \      ← Medium, test boundaries
-       /   Unit Tests   \    ← Many, fast, focused
+test('creates user with valid data', async () => {
+  // Arrange
+  const userData = { email: 'test@example.com', name: 'Test' }
+  
+  // Act
+  const result = await createUser(userData)
+  
+  // Assert
+  expect(result.email).toBe('test@example.com')
+  expect(result.id).toBeDefined()
+})
 ```
 
-| Layer | Count | Speed | Scope | Tools |
-|-------|-------|-------|-------|-------|
-| **Unit** | Hundreds | ms each | Single function/module | Vitest, Jest |
-| **Integration** | Dozens | seconds each | API + DB, service boundaries | Vitest + test DB |
-| **E2E** | 10-20 | minutes each | Full user flows | Playwright |
+### Test Fixtures
+```
+Use factories for test data:
+- Consistent, realistic data
+- Isolated per test (no shared state)
+- Easy to customize for specific scenarios
+```
 
-### What to Test
+## Anti-Patterns to Avoid
 
-| Always Test | Sometimes Test | Rarely Test |
-|-------------|---------------|-------------|
-| Business logic | UI components | CSS styling |
-| Auth flows | Error messages | Third-party libraries |
-| Data validation | Edge cases | Framework behavior |
-| API contracts | Performance | Implementation details |
-| Critical user paths | Accessibility | Internal state |
+- **T1: No tests** — Even minimal tests catch regressions.
+- **T3: Testing implementation, not behavior** — Tests should verify what, not how.
+- **T6: Flaky tests** — Fix or quarantine. Flaky tests erode trust in the suite.
+- **T15: 100% coverage target** — Diminishing returns. Focus on critical paths.
 
-### What NOT to Test
+## Quality Rubric (35 points)
 
-- Framework behavior (React rendering, Next.js routing)
-- Third-party library internals
-- Implementation details (internal state, private methods)
-- Trivial code (simple getters, pass-through functions)
-- Generated code (types, migrations)
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Strategy** | Testing pyramid with clear priorities | Some test organization | Random test collection |
+| **Coverage** | Critical paths covered, >80% business logic | Key paths covered | Minimal coverage |
+| **Speed** | Full suite <5 minutes, fast feedback | <15 minutes | >15 minutes |
+| **Reliability** | <1% flaky rate | <5% flaky | Frequently flaky |
+| **Maintainability** | DRY fixtures, clear naming, easy to add tests | Somewhat organized | Brittle, hard to maintain |
+| **CI integration** | Tests run on every PR, block merging | Tests in CI | No CI integration |
+| **Data isolation** | Each test is independent, no shared state | Mostly isolated | Tests depend on each other |
 
----
-
-## Anti-Pattern References
-
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T15 | No tests | Bugs in production |
-| T27 | Testing implementation details | Brittle tests that break on refactor |
-| T28 | Too many E2E tests | Slow CI, flaky tests |
-
----
-
-## Quality Rubric
-
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Coverage** | No tests | Critical paths covered | Comprehensive with pyramid balance |
-| **Speed** | >10 min suite | 3-10 min | <3 min (unit + integration) |
-| **Reliability** | Flaky tests | Mostly stable | Zero flaky tests |
-| **Maintenance** | Tests break on refactor | Some coupling | Tests only break on behavior change |
-| **CI integration** | Tests not in CI | Tests run on PR | Tests block merge, results visible |
-| **Documentation** | No test docs | README | Test patterns documented, examples |
-| **Data management** | Shared test data | Fixtures | Factory-based, isolated per test |
-
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Confident in deployments | 21-27 = Known gaps | <21 = Shipping blind**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Parallel** | ci-cd-pipeline | Tests run in CI |
-| **Parallel** | error-handling | Error cases need tests |
-| **Review** | council-review (tech) | Validates testing approach |
-
----
-
-## Output Checklist
-
-- [ ] Test pyramid balance defined (many unit, fewer integration, minimal E2E)
-- [ ] Critical paths identified and tested
-- [ ] Test tools selected and configured
-- [ ] Tests run in CI before merge
-- [ ] Test data strategy (factories, fixtures)
-- [ ] Flaky test policy (fix or delete)
-- [ ] Coverage targets set (realistic, not 100%)
+- **Upstream:** `system-architecture` (testability), `api-design` (what to test)
+- **Downstream:** `ci-cd-pipeline` (running tests), `monitoring-setup` (production validation)
+- **Council:** Submit to `council-review` for testing strategy review

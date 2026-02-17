@@ -1,130 +1,102 @@
----
-name: performance-optimization
-version: 2.0.0
-description: "When the user needs to optimize application performance, reduce latency, or improve throughput. Also use when the user mentions 'performance,' 'optimization,' 'slow page,' 'latency,' 'Core Web Vitals,' or 'load time.' This skill covers web application performance."
----
-
 # Performance Optimization
 
-You are an expert in web application performance optimization. Your goal is to systematically identify and fix performance bottlenecks.
-
----
+Identify and resolve performance bottlenecks across frontend, backend, and database layers.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read monitoring dashboards for current performance baselines
+2. Read `.claude/product-marketing-context.md` for performance SLAs
+
+## Decision Tree: Where's the Bottleneck?
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Application architecture
-  ├─ Current performance metrics
-  ├─ Performance targets/SLAs
-  └─ User-reported issues
+What's slow?
+├── Page load (frontend)
+│   ├── Large bundle → Code splitting, tree shaking, lazy loading
+│   ├── Slow rendering → Memoization, virtualization, reduce re-renders
+│   ├── Too many requests → Batching, prefetching, caching
+│   └── Large assets → Image optimization, CDN, compression
+├── API response (backend)
+│   ├── Slow database queries → Indexing, query optimization
+│   ├── N+1 queries → Eager loading, DataLoader pattern
+│   ├── External API calls → Caching, parallel requests, circuit breaker
+│   └── Heavy computation → Background jobs, caching results
+├── Database (data layer)
+│   ├── Missing indexes → Add targeted indexes
+│   ├── Full table scans → Optimize WHERE clauses, partial indexes
+│   ├── Connection exhaustion → Pooling, pgBouncer
+│   └── Lock contention → Optimize transactions, advisory locks
+└── Infrastructure
+    ├── Under-provisioned → Right-size instances
+    ├── No CDN → Add CDN for static assets
+    └── Cold starts → Keep-alive, provisioned concurrency
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Performance Budgets
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
+| Metric | Target | Measure With |
+|--------|--------|-------------|
+| **LCP** (Largest Contentful Paint) | <2.5s | Core Web Vitals |
+| **FID** (First Input Delay) | <100ms | Core Web Vitals |
+| **CLS** (Cumulative Layout Shift) | <0.1 | Core Web Vitals |
+| **TTFB** (Time to First Byte) | <200ms | Server metrics |
+| **API p50 latency** | <100ms | APM |
+| **API p99 latency** | <500ms | APM |
+| **Bundle size** | <200KB gzipped (initial) | Webpack analyzer |
+| **Database query** | <50ms p95 | Query logging |
 
----
+## Optimization Techniques
 
-## Decision Tree: Optimization Target
+### Frontend
+| Technique | Impact | Effort |
+|-----------|--------|--------|
+| Code splitting / lazy loading | High | Low |
+| Image optimization (WebP, lazy load) | High | Low |
+| CDN for static assets | High | Low |
+| Memoization (useMemo, React.memo) | Medium | Low |
+| Virtual scrolling for long lists | High | Medium |
+| Service worker caching | Medium | Medium |
 
-```
-START: Where is the bottleneck?
+### Backend
+| Technique | Impact | Effort |
+|-----------|--------|--------|
+| Response caching (Redis, CDN) | High | Medium |
+| Database query optimization | High | Medium |
+| Connection pooling | High | Low |
+| Parallel external API calls | Medium | Low |
+| Background job offloading | High | Medium |
 
-├─ FRONTEND (slow page load, poor CWV)
-│  ├─ Bundle size analysis (next/bundle-analyzer)
-│  ├─ Image optimization (next/image, WebP, AVIF)
-│  ├─ Code splitting and lazy loading
-│  └─ Measure: LCP, FID/INP, CLS
+### Database
+| Technique | Impact | Effort |
+|-----------|--------|--------|
+| Add missing indexes | High | Low |
+| EXPLAIN ANALYZE on slow queries | High | Low |
+| Partial indexes for common filters | Medium | Low |
+| Materialized views for dashboards | High | Medium |
+| Partitioning for large tables | High | High |
 
-├─ BACKEND (slow API responses)
-│  ├─ Database query optimization (EXPLAIN ANALYZE)
-│  ├─ Caching strategy (Redis, CDN, in-memory)
-│  ├─ N+1 query detection
-│  └─ Measure: p50, p95, p99 response time
+## Anti-Patterns to Avoid
 
-├─ DATABASE (slow queries, connection issues)
-│  ├─ Index optimization
-│  ├─ Query rewriting
-│  ├─ Connection pooling
-│  └─ Measure: Query time, connection count
+- **T10: Premature optimization** — Profile first, optimize second. Don't guess at bottlenecks.
+- **T1: Caching without invalidation strategy** — Stale cache is worse than no cache.
+- **T9: N+1 queries** — Use DataLoader, eager loading, or JOIN to batch queries.
 
-└─ INFRASTRUCTURE (capacity, scaling)
-   ├─ Horizontal scaling
-   ├─ CDN for static assets
-   ├─ Edge computing for global users
-   └─ Measure: CPU/memory utilization, throughput
-```
+## Quality Rubric (35 points)
 
----
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Profiling** | Data-driven optimization with profiling evidence | Some profiling | Guessing at bottlenecks |
+| **Budget compliance** | All performance budgets met | Most budgets met | No performance budgets |
+| **Caching strategy** | Multi-layer caching with invalidation | Some caching | No caching |
+| **Query optimization** | All slow queries identified and optimized | Key queries optimized | No query optimization |
+| **Bundle optimization** | Code split, tree shaken, lazy loaded | Some optimization | Monolithic bundle |
+| **Monitoring** | Performance dashboards with trend tracking | Basic metrics | No performance monitoring |
+| **Regression prevention** | Performance tests in CI, bundle size checks | Some checks | No prevention |
 
-## Optimization Priorities
-
-Always measure first, then optimize in this order:
-
-| Priority | Action | Typical Impact |
-|----------|--------|---------------|
-| 1. **Eliminate** | Remove unnecessary work | Highest |
-| 2. **Cache** | Don't repeat expensive work | High |
-| 3. **Defer** | Move work off critical path | Medium |
-| 4. **Parallelize** | Do work concurrently | Medium |
-| 5. **Optimize** | Make work faster | Low-Medium |
-
-### Common Quick Wins
-
-| Area | Fix | Impact |
-|------|-----|--------|
-| Images | Next/Image, lazy loading, proper sizing | LCP -50% |
-| JavaScript | Code splitting, tree shaking, dynamic imports | TTI -30% |
-| Database | Add missing index | Query time -90% |
-| API | Add Redis cache for hot data | Response time -80% |
-| Fonts | Display: swap, preload, self-host | CLS improvement |
-
----
-
-## Anti-Pattern References
-
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T2 | No caching strategy | Repeated expensive operations |
-| T8 | Missing indexes | Full table scans |
-| T18 | Premature optimization | Wasted effort on non-bottlenecks |
-
----
-
-## Quality Rubric
-
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Measurement** | No metrics | Basic timing | Full performance budget with monitoring |
-| **Frontend** | No optimization | Images + code split | CWV green, optimal bundle |
-| **Backend** | No profiling | Identified slow endpoints | All endpoints within SLA |
-| **Database** | No query analysis | Major queries optimized | Query plan review, all indexed |
-| **Caching** | No caching | Some caching | Multi-level cache strategy |
-| **Testing** | No load testing | Manual testing | Automated load testing in CI |
-| **Monitoring** | No tracking | Alerting on degradation | Performance budgets with regression alerts |
-
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Performant system | 21-27 = Known bottlenecks | <21 = Performance problems**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | monitoring-setup | Monitoring identifies bottlenecks |
-| **Parallel** | database-schema | Schema affects query performance |
-| **Review** | council-review (tech) | Validates optimization approach |
-
----
-
-## Output Checklist
-
-- [ ] Performance baseline measured before optimization
-- [ ] Bottleneck identified with profiling data
-- [ ] Optimization approach chosen (eliminate > cache > defer > parallelize > optimize)
-- [ ] Change implemented with minimal side effects
-- [ ] Performance improvement measured after change
-- [ ] Regression protection in place (performance budget/alerts)
+- **Upstream:** `monitoring-setup` (identify bottlenecks), `database-schema` (query patterns)
+- **Downstream:** `ci-cd-pipeline` (performance regression checks)
+- **Council:** Submit to `council-review` for performance review

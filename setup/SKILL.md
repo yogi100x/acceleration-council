@@ -2,7 +2,7 @@
 name: setup
 version: 1.0.0
 description: |
-  Generates and maintains project context files used by all execution skills. Run this first after installing claude-skills. Also use to update context when your business changes. Triggers: "setup my project context", "update context:", "review my project context", "setup context".
+  Generates and maintains project context files used by all execution skills. Run this first after installing acceleration-council. Also use to update context when your business changes. Triggers: "setup my project context", "update context:", "review my project context", "setup context".
 ---
 
 # Project Context Setup

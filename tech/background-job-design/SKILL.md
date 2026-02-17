@@ -1,141 +1,101 @@
----
-name: background-job-design
-version: 2.0.0
-description: "When the user needs to design background job systems for async processing. Also use when the user mentions 'background jobs,' 'async processing,' 'job queue,' 'worker,' 'cron jobs,' or 'task queue.' This skill covers background job architecture."
----
-
 # Background Job Design
 
-You are an expert in background job system design. Your goal is to design reliable, observable async processing systems.
-
----
+Design reliable background job systems for async processing, scheduled tasks, and long-running operations.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing background job patterns
+2. Read `.claude/product-marketing-context.md` for async processing needs
+
+## Decision Tree: Job Type
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Current job infrastructure (Trigger.dev, Bull, SQS, etc.)
-  ├─ Job types and volumes
-  ├─ Latency requirements
-  └─ Failure handling needs
+What needs to happen?
+├── Immediate async (user triggered, <30s)
+│   └── Queue job, return immediately, poll/notify for result
+│       Example: File processing, email sending
+├── Scheduled (recurring)
+│   └── Cron-style scheduling with idempotent jobs
+│       Example: Daily reports, subscription renewal
+├── Long-running (minutes to hours)
+│   └── Resumable jobs with progress tracking and checkpointing
+│       Example: Bulk data import, AI grading
+├── Event-driven (react to changes)
+│   └── Event queue/pub-sub with ordered processing
+│       Example: Webhook processing, data sync
+└── Batch processing (large datasets)
+    └── Chunked processing with parallelism controls
+        Example: Bulk email, data migration
 ```
-
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Job Architecture
-
-```
-START: What type of background work?
-
-├─ FIRE AND FORGET (email, notification, logging)
-│  ├─ Simple queue with basic retry
-│  ├─ No result needed by caller
-│  └─ Key: At-least-once delivery, idempotent handlers
-
-├─ REQUEST-RESPONSE (grading, processing, generation)
-│  ├─ Job with status tracking and result storage
-│  ├─ Progress updates via WebSocket/polling
-│  └─ Key: Status endpoint, timeout handling
-
-├─ SCHEDULED (daily reports, cleanup, sync)
-│  ├─ Cron-based scheduling
-│  ├─ Distributed lock to prevent duplicates
-│  └─ Key: Idempotent, monitoring for missed runs
-
-├─ PIPELINE (multi-step processing)
-│  ├─ Step functions / workflow engine
-│  ├─ Each step idempotent and retryable
-│  └─ Key: State management, partial failure handling
-
-└─ FAN-OUT (parallel processing)
-   ├─ Parent job spawns N child jobs
-   ├─ Aggregation when all children complete
-   └─ Key: Concurrency limits, partial results
-```
-
----
 
 ## Job Design Principles
 
+### Every Job Must Be
+
 | Principle | Implementation |
 |-----------|---------------|
-| **Idempotent** | Same input → same result, safe to retry |
-| **Observable** | Status, progress, duration, error tracking |
-| **Bounded** | Timeout on every job, max retries |
-| **Isolated** | One job failure doesn't affect others |
-| **Prioritized** | Critical jobs processed before background |
+| **Idempotent** | Running twice produces same result |
+| **Resumable** | Can restart from last checkpoint on failure |
+| **Observable** | Progress, status, and errors are visible |
+| **Bounded** | Has a timeout and maximum retry count |
+| **Isolated** | One job's failure doesn't affect others |
 
 ### Job Lifecycle
 
 ```
-Created → Queued → Running → Completed/Failed
-                      ↓
-                  Retrying (with backoff)
-                      ↓
-                  Dead Letter Queue (max retries exceeded)
+PENDING → RUNNING → COMPLETED
+                 → FAILED → RETRYING → RUNNING
+                                     → DEAD (max retries exceeded)
 ```
 
-### Retry Strategy
+### Concurrency Control
 
-| Attempt | Delay | Total Wait |
-|---------|-------|-----------|
-| 1 | 10 seconds | 10s |
-| 2 | 1 minute | 1m 10s |
-| 3 | 10 minutes | 11m 10s |
-| 4 | 1 hour | 1h 11m |
-| 5 | Dead letter queue | — |
+| Pattern | When | Implementation |
+|---------|------|----------------|
+| **Queue-based** | Process in order | FIFO queue, single consumer |
+| **Worker pool** | Parallel processing | N workers, shared queue |
+| **Rate limited** | External API constraints | Token bucket, leaky bucket |
+| **Unique** | Only one instance running | Lock/mutex, unique job key |
+| **Priority** | Some jobs more urgent | Priority queue, separate queues |
 
----
+## Error Handling
 
-## Anti-Pattern References
+```
+Retry strategy per job type:
+  Transient errors (network, timeout): Retry with backoff
+  Permanent errors (validation, auth): Don't retry, alert
+  Partial failure: Checkpoint progress, retry remaining
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T3 | Synchronous everything | User waits for slow operations |
-| T5 | No idempotency | Duplicate processing on retry |
-| T23 | No timeout | Zombie jobs consuming resources |
+Dead letter queue:
+  After max retries, move to dead letter queue
+  Alert on-call team
+  Provide manual retry capability
+  Log full context for debugging
+```
 
----
+## Anti-Patterns to Avoid
 
-## Quality Rubric
+- **T3: Jobs without idempotency** — Jobs will be retried. Make them safe to re-run.
+- **T5: No timeout** — A stuck job can block the entire queue.
+- **T7: No monitoring** — Jobs fail silently without alerting.
+- **T8: Unbounded concurrency** — Can overwhelm databases and external APIs.
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Idempotency** | Not idempotent | Most jobs idempotent | All jobs provably idempotent |
-| **Observability** | No tracking | Status and logs | Progress, duration, metrics dashboard |
-| **Retry strategy** | No retry | Fixed retry | Exponential backoff with DLQ |
-| **Concurrency** | Unlimited | Global limit | Per-job-type limits with priority |
-| **Error handling** | Silent failure | Logged errors | Alerts + DLQ + manual retry UI |
-| **Testing** | Not tested | Unit tests | Integration tests with real queue |
-| **Documentation** | No docs | Job list | Full docs with flow diagrams |
+## Quality Rubric (35 points)
 
-**Score: /35. Ship at 28+.**
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Idempotency** | All jobs are idempotent with verification | Most jobs | No idempotency |
+| **Error handling** | Retry, dead letter, alerting, manual retry | Basic retries | No error handling |
+| **Observability** | Progress tracking, status dashboard, logs | Basic logging | No visibility |
+| **Concurrency** | Appropriate controls per job type | Global limits | No controls |
+| **Scheduling** | Cron with overlap prevention and drift handling | Basic cron | Manual triggering |
+| **Scalability** | Horizontal scaling with work distribution | Some scaling | Single worker |
+| **Testing** | Job-level unit tests, integration tests | Some testing | No testing |
 
----
+**28+ = Production-grade | 21-27 = Needs reliability work | <21 = Jobs will fail silently**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | system-architecture | Architecture determines job infrastructure |
-| **Parallel** | monitoring-setup | Monitor job health |
-| **Parallel** | error-handling | Job error handling strategy |
-| **Review** | council-review (tech) | Validates job design |
-
----
-
-## Output Checklist
-
-- [ ] Job types classified (fire-and-forget, request-response, scheduled, pipeline)
-- [ ] Each job is idempotent (safe to retry)
-- [ ] Retry strategy with exponential backoff
-- [ ] Concurrency limits set per job type
-- [ ] Timeout on every job
-- [ ] Dead letter queue for failed jobs
-- [ ] Monitoring dashboard for job health
+- **Upstream:** `system-architecture` (job infrastructure), `api-design` (trigger points)
+- **Downstream:** `monitoring-setup` (job monitoring), `error-handling` (failure patterns)
+- **Council:** Submit to `council-review` for reliability review

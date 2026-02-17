@@ -1,140 +1,128 @@
----
-name: webhook-design
-version: 2.0.0
-description: "When the user needs to design webhook systems for event delivery. Also use when the user mentions 'webhook,' 'event delivery,' 'callback URL,' 'webhook security,' or 'event notification.' This skill covers webhook system design."
----
-
 # Webhook Design
 
-You are an expert in webhook system design. Your goal is to create reliable, secure webhook delivery systems.
-
----
+Design reliable webhook systems for both sending and receiving events.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing webhook implementations
+2. Read `.claude/product-marketing-context.md` for integration requirements
+
+## Decision Tree: Webhook Role
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Events to deliver
-  ├─ Consumer requirements
-  ├─ Delivery guarantees needed
-  └─ Current infrastructure
+Are you sending or receiving?
+├── Receiving webhooks (from Stripe, GitHub, etc.)
+│   └── Focus: Signature verification, idempotency, async processing
+├── Sending webhooks (to customers/integrations)
+│   └── Focus: Delivery guarantees, retry strategy, payload design
+└── Both
+    └── Apply both patterns
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Receiving Webhooks
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Webhook Architecture
+### Processing Pattern
 
 ```
-START: Who receives the webhooks?
+1. Receive request
+2. Verify signature (HMAC-SHA256 typical)
+3. Return 200 immediately (process async)
+4. Check idempotency (have we processed this event ID before?)
+5. Process event in background job
+6. Record result
 
-├─ YOUR OWN SERVICES (internal events)
-│  ├─ Consider: Message queue instead (more reliable)
-│  ├─ If webhook: Shared secret + retry
-│  └─ Key: Idempotency, ordering
-
-├─ THIRD-PARTY CONSUMERS (public API)
-│  ├─ HMAC signature verification
-│  ├─ Retry with exponential backoff
-│  ├─ Event types and filtering
-│  ├─ Delivery dashboard and logs
-│  └─ Key: Reliability, security, developer experience
-
-└─ RECEIVING WEBHOOKS (from vendors)
-   ├─ Verify signature FIRST
-   ├─ Return 200 immediately, process async
-   ├─ Idempotency check (event ID dedup)
-   └─ Key: Quick response, async processing
+Never:
+- Do heavy processing synchronously (webhook sender will timeout)
+- Return non-2xx before processing (will trigger retry)
+- Skip signature verification (anyone can POST to your endpoint)
 ```
 
----
-
-## Webhook Best Practices
-
-### Sending Webhooks
-
-| Component | Implementation |
-|-----------|---------------|
-| **Payload** | JSON with event type, timestamp, data, idempotency key |
-| **Security** | HMAC-SHA256 signature in header |
-| **Retry** | 3-5 retries, exponential backoff (1m, 5m, 30m, 2h, 24h) |
-| **Timeout** | 30 second response timeout |
-| **Ordering** | Include sequence number, don't guarantee order |
-| **Filtering** | Let consumers subscribe to specific event types |
-
-### Receiving Webhooks
+### Idempotency
 
 ```
-1. Verify signature → Reject if invalid (return 401)
-2. Check idempotency key → Skip if already processed (return 200)
-3. Return 200 OK immediately
-4. Process event asynchronously (queue or background job)
-5. Log event with processing status
+Every webhook handler must be idempotent:
+
+1. Store processed event IDs (event_id + provider)
+2. Before processing, check if already processed
+3. If duplicate, return 200 (success) without reprocessing
+4. Use database transactions to prevent race conditions
+
+CREATE TABLE webhook_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  provider TEXT NOT NULL,
+  event_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  processed_at TIMESTAMPTZ DEFAULT now(),
+  payload JSONB,
+  UNIQUE(provider, event_id)
+);
 ```
 
-### Webhook Payload Format
+## Sending Webhooks
+
+### Delivery Guarantees
+
+| Guarantee | Implementation | Use Case |
+|-----------|---------------|----------|
+| **At-most-once** | Fire and forget | Non-critical notifications |
+| **At-least-once** | Retry on failure (with idempotency key) | Most use cases |
+| **Exactly-once** | At-least-once + receiver idempotency | Financial transactions |
+
+### Retry Strategy
+
+```
+Exponential backoff with jitter:
+  Attempt 1: Immediate
+  Attempt 2: 1 minute + jitter
+  Attempt 3: 5 minutes + jitter
+  Attempt 4: 30 minutes + jitter
+  Attempt 5: 2 hours + jitter
+  Attempt 6: 8 hours + jitter
+  
+After all retries: Mark as failed, alert, allow manual retry
+
+Jitter: random(0, 0.5 × delay) to prevent thundering herd
+```
+
+### Payload Design
 
 ```json
 {
-  "id": "evt_123abc",
-  "type": "order.completed",
-  "created": "2024-01-15T10:30:00Z",
+  "id": "evt_abc123",
+  "type": "candidate.verified",
+  "created_at": "2026-02-17T10:30:00Z",
   "data": {
-    "object": { ... }
+    "candidate_id": "cand_def456",
+    "assessment": "react-senior",
+    "score": 92
   },
-  "api_version": "2024-01-15"
+  "api_version": "2026-02-01"
 }
 ```
 
----
+## Anti-Patterns to Avoid
 
-## Anti-Pattern References
+- **T6: No signature verification** — Anyone can fake a webhook. Always verify.
+- **T7: Synchronous processing** — Process async. Return 200 fast.
+- **T8: No idempotency** — Webhooks are delivered at-least-once. Handle duplicates.
+- **T9: No retry mechanism** — Network failures happen. Implement retries with backoff.
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T5 | No idempotency | Duplicate processing on retry |
-| T21 | Sync processing | Slow consumer blocks delivery |
-| T22 | No signature verification | Spoofed webhook attacks |
+## Quality Rubric (35 points)
 
----
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Signature verification** | HMAC verification on all incoming webhooks | Most verified | No verification |
+| **Idempotency** | Event deduplication with database tracking | Basic dedup | No dedup |
+| **Async processing** | Background job for all webhook processing | Most async | Synchronous |
+| **Retry strategy** | Exponential backoff with jitter, configurable | Basic retries | No retries |
+| **Monitoring** | Delivery success rates, latency, failure alerts | Basic logging | No monitoring |
+| **Documentation** | Event catalog, payload schemas, integration guide | Basic docs | No docs |
+| **Testing** | Webhook simulation, replay capability | Some testing | Manual only |
 
-## Quality Rubric
-
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Security** | No verification | Shared secret | HMAC signature + IP allowlisting |
-| **Reliability** | Fire and forget | Basic retry | Exponential backoff with dead letter queue |
-| **Idempotency** | Not handled | Consumer-side dedup | Event ID + idempotency key |
-| **Monitoring** | No tracking | Success/failure logs | Delivery dashboard with retry visibility |
-| **Documentation** | No docs | Event list | Full docs with payload examples and testing |
-| **Developer experience** | No tooling | Webhook tester | CLI tool, test mode, event replay |
-| **Filtering** | All events sent | Event type subscription | Granular filtering with wildcard support |
-
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Reliable integration | 21-27 = Needs hardening | <21 = Data loss risk**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | api-design | Webhooks complement API |
-| **Parallel** | error-handling | Webhook failure handling |
-| **Review** | council-review (tech) | Validates webhook design |
-
----
-
-## Output Checklist
-
-- [ ] Event types defined with payload schemas
-- [ ] HMAC signature verification implemented
-- [ ] Retry strategy with exponential backoff
-- [ ] Idempotency handling (event ID dedup)
-- [ ] Async processing (don't block on consumer)
-- [ ] Delivery monitoring and logging
-- [ ] Developer documentation with examples
+- **Upstream:** `api-design` (endpoint design), `system-architecture` (event architecture)
+- **Downstream:** `monitoring-setup` (webhook monitoring), `error-handling` (failure handling)
+- **Council:** Submit to `council-review` for reliability review

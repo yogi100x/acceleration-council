@@ -788,7 +788,7 @@ IF ANY UNCHECKED: ✗ Revise Test Plan Before Launch
 - **Sample Size Calculator:** [https://www.optimizely.com/sample-size-calculator/](sample calculator)
 - **Statistical Power Reference:** G*Power software for detailed calculations
 - **Industry Benchmarks:** Conversion Lab, WebsiteOptimization.com
-- **Anti-Pattern Deep Dive:** See `/tmp/claude-skills/shared/references/anti-patterns.md` (M-series)
+- **Anti-Pattern Deep Dive:** See `shared/references/anti-patterns.md` (M-series)
 - **Analytics Tracking Setup:** Refer to `analytics-tracking` skill for event instrumentation
 - **CRO Prioritization:** Refer to `cro` skill for hypothesis generation
 
