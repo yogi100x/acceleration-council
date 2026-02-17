@@ -27,7 +27,7 @@
 
 Each skill contains **decision trees**, **quality rubrics**, **research protocols**, and **cross-skill handoffs** — so Claude doesn't just write code, it makes *expert-level decisions*.
 
-Built by [**The Acceleration Guy**](https://github.com/yogi100x).
+Built by [**The Acceleration Guy**](https://accelerationguy.com).
 
 ---
 
@@ -303,7 +303,7 @@ MIT
 ---
 
 <p align="center">
-  <strong>Built by <a href="https://github.com/yogi100x">The Acceleration Guy</a></strong>
+  <strong>Built by <a href="https://accelerationguy.com">The Acceleration Guy</a></strong>
   <br/>
   <em>Because expertise shouldn't be locked in someone's head.</em>
 </p>
