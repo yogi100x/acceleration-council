@@ -1,126 +1,88 @@
----
-name: ci-cd-pipeline
-version: 2.0.0
-description: "When the user needs to set up or improve CI/CD pipelines. Also use when the user mentions 'CI/CD,' 'continuous integration,' 'deployment pipeline,' 'GitHub Actions,' 'build automation,' or 'deploy process.' This skill covers CI/CD pipeline design."
----
-
 # CI/CD Pipeline
 
-You are an expert in CI/CD pipeline design. Your goal is to create fast, reliable, and secure deployment pipelines.
-
----
+Design continuous integration and deployment pipelines for reliable, fast software delivery.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing CI/CD configuration
+2. Read `.claude/product-marketing-context.md` for deployment requirements
+
+## Decision Tree: Pipeline Architecture
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Source control and branching strategy
-  ├─ Current CI/CD tools
-  ├─ Deployment targets (Vercel, AWS, etc.)
-  └─ Test infrastructure
+What's your setup?
+├── Single app, small team
+│   └── GitHub Actions with simple workflow
+│       → lint → test → build → deploy
+├── Monorepo, multiple apps
+│   └── Turborepo + GitHub Actions with affected detection
+│       → Only build/test/deploy changed packages
+├── Microservices
+│   └── Per-service pipelines with shared workflows
+│       → Independent deploy, integration tests
+└── Enterprise / Regulated
+    └── Multi-stage with approvals
+        → Dev → Staging → UAT → Production (with gates)
 ```
-
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Pipeline Design
-
-```
-START: What's your deployment target?
-
-├─ SERVERLESS/EDGE (Vercel, Cloudflare, Netlify)
-│  ├─ Git push → automatic preview + production deploy
-│  ├─ CI: Lint, type-check, test in GitHub Actions
-│  └─ Key: Fast builds, preview deployments, rollback
-
-├─ CONTAINERS (Docker, K8s, ECS)
-│  ├─ Build → Test → Image → Registry → Deploy
-│  ├─ Multi-stage Docker builds
-│  └─ Key: Image size, registry management, health checks
-
-├─ TRADITIONAL (VPS, bare metal)
-│  ├─ Build → Test → rsync/scp → restart
-│  └─ Key: Zero-downtime deploy, blue-green or rolling
-
-└─ MONOREPO (multiple apps)
-   ├─ Affected-only builds (Turborepo, Nx)
-   ├─ Parallel pipelines per app
-   └─ Key: Cache efficiency, dependency graph
-```
-
----
 
 ## Pipeline Stages
 
-| Stage | What | Speed Target | Fail Action |
-|-------|------|-------------|-------------|
-| **Lint** | Code style, formatting | <30s | Block merge |
-| **Type check** | TypeScript compilation | <60s | Block merge |
-| **Unit tests** | Business logic | <2min | Block merge |
-| **Integration tests** | API, database | <5min | Block merge |
-| **Build** | Production build | <3min | Block merge |
-| **E2E tests** | Full user flows | <10min | Block merge (or warn) |
-| **Preview deploy** | Staging environment | <3min | Warn |
-| **Production deploy** | Live environment | <3min | Manual rollback ready |
+| Stage | Purpose | Fail = Block? | Typical Duration |
+|-------|---------|---------------|-----------------|
+| **Lint** | Code style, static analysis | Yes | 30s-2min |
+| **Type check** | TypeScript compilation | Yes | 1-3min |
+| **Unit tests** | Business logic verification | Yes | 1-5min |
+| **Build** | Compilation, bundling | Yes | 2-10min |
+| **Integration tests** | API, database tests | Yes | 3-10min |
+| **E2E tests** | Full user flow tests | Warn (flaky tolerance) | 5-20min |
+| **Security scan** | Dependency vulnerabilities | Block on critical | 1-3min |
+| **Deploy to staging** | Staging environment update | Yes | 2-5min |
+| **Deploy to production** | Production release | Yes (manual gate optional) | 2-5min |
 
-### Speed Optimization
+## Deployment Strategies
 
-| Technique | Impact |
-|-----------|--------|
-| **Caching** | Cache node_modules, build artifacts, Turbo cache |
-| **Parallelization** | Run lint, type-check, tests in parallel |
-| **Affected-only** | Only build/test changed packages |
-| **Incremental builds** | TypeScript incremental, Next.js caching |
-| **Skip redundant** | Skip E2E for docs-only changes |
+| Strategy | Risk | Rollback Speed | Best For |
+|----------|------|----------------|----------|
+| **Direct deploy** | High | Slow (redeploy) | Internal tools |
+| **Blue-green** | Low | Instant (switch) | Stateless services |
+| **Canary** | Low | Fast (route away) | High-traffic services |
+| **Rolling** | Medium | Medium | Containerized services |
+| **Feature flags** | Very low | Instant (toggle) | Any, especially UI |
 
----
+## Caching Strategy
 
-## Anti-Pattern References
+```
+Cache these for faster CI:
+- node_modules (key: package-lock.json hash)
+- Build output (.next, dist) (key: source hash)
+- Turborepo remote cache (for monorepos)
+- Docker layers (for containerized builds)
+- Test results (for unchanged code)
+```
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T14 | No CI/CD | Manual, error-prone deployments |
-| T15 | Tests in production | Breaking changes discovered by users |
+## Anti-Patterns to Avoid
 
----
+- **T3: No CI/CD** — Manual deployments are error-prone and slow.
+- **T6: Flaky tests blocking deploys** — Quarantine flaky tests, don't disable CI.
+- **T7: No staging environment** — Test in production-like environment before deploying.
+- **T15: Slow pipelines** — If CI takes >15 minutes, developers won't wait. Parallelize and cache.
 
-## Quality Rubric
+## Quality Rubric (35 points)
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Automation** | Manual deploy | CI builds, manual deploy | Full CI/CD with automated deploy |
-| **Speed** | >30 min pipeline | 10-30 min | <10 min total |
-| **Testing** | No tests in pipeline | Unit + integration | Unit + integration + E2E |
-| **Rollback** | Manual restoration | Documented process | One-click/auto rollback |
-| **Security** | Secrets in code | Env vars | Secrets manager + least privilege |
-| **Environments** | Only production | Staging + production | Preview + staging + production |
-| **Monitoring** | No deploy tracking | Deploy notifications | Deploy metrics + error rate correlation |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Coverage** | Lint, type check, test, build, deploy all automated | Key stages automated | Partial automation |
+| **Speed** | <10 minutes total | <20 minutes | >20 minutes |
+| **Reliability** | <1% flaky failure rate | <5% flaky | Frequently broken |
+| **Caching** | Dependencies, builds, and test results cached | Some caching | No caching |
+| **Rollback** | One-click rollback with verification | Manual rollback possible | No rollback plan |
+| **Security** | Secrets management, vulnerability scanning | Basic secrets handling | Secrets in code |
+| **Monitoring** | Deploy notifications, pipeline metrics | Basic notifications | No visibility |
 
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Fast and reliable | 21-27 = Needs optimization | <21 = Delivery bottleneck**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Feeds into** | monitoring-setup | Monitoring detects deploy issues |
-| **Parallel** | testing-strategy | Tests run in pipeline |
-| **Review** | council-review (tech) | Validates pipeline design |
-
----
-
-## Output Checklist
-
-- [ ] Pipeline stages defined with speed targets
-- [ ] Caching configured for fast builds
-- [ ] Tests run before merge (not after)
-- [ ] Preview/staging deployments available
-- [ ] Rollback procedure documented and tested
-- [ ] Secrets management secure (no hardcoded values)
-- [ ] Deploy notifications to team
+- **Upstream:** `system-architecture` (deployment architecture), `testing-strategy` (what to test)
+- **Downstream:** `monitoring-setup` (post-deploy monitoring)
+- **Council:** Submit to `council-review` for pipeline review

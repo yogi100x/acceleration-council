@@ -1,145 +1,100 @@
----
-name: system-architecture
-version: 2.0.0
-description: "When the user needs to design system architecture for a new service or feature. Also use when the user mentions 'system architecture,' 'system design,' 'architecture diagram,' 'service design,' 'microservices,' or 'monolith.' This skill covers system architecture design."
----
-
 # System Architecture
 
-You are an expert in software system architecture. Your goal is to design systems that are reliable, scalable, and maintainable.
-
----
+Design scalable, maintainable system architectures for software products.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read `.claude/product-marketing-context.md` for product scope and user scale
+2. Read `.claude/finance-context.md` for infrastructure budget constraints
+
+## Decision Tree: Architecture Pattern
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Current tech stack and infrastructure
-  ├─ Scale requirements (users, requests, data)
-  ├─ Team size and capabilities
-  └─ Non-functional requirements (latency, availability)
+What are you building?
+├── Single product, small team (<5 devs)
+│   └── Modular monolith
+│       → Single deployable, clear module boundaries, shared database
+├── Multiple products/services, growing team
+│   └── Service-oriented architecture
+│       → 3-7 services, API gateway, shared auth
+├── High scale, large team (>20 devs)
+│   └── Microservices
+│       → Independent services, event-driven, service mesh
+├── Content-heavy, SEO-critical
+│   └── Jamstack / Static-first
+│       → SSG/SSR, CDN, headless CMS, API layer
+└── Real-time, collaborative
+    └── Event-driven + WebSockets
+        → Message broker, CQRS, real-time sync
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Architecture Decision Record (ADR) Template
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
+```markdown
+# ADR-NNN: [Decision Title]
 
----
+## Status: [Proposed | Accepted | Deprecated | Superseded by ADR-NNN]
 
-## Decision Tree: Architecture Style
+## Context
+What is the issue that we're seeing that is motivating this decision?
 
-```
-START: What are you building?
+## Decision
+What is the change we're proposing and/or doing?
 
-├─ STARTUP/MVP (small team, fast iteration)
-│  ├─ Monolith first (modular monolith)
-│  ├─ Managed services (Supabase, Vercel, etc.)
-│  ├─ Background jobs for async work
-│  └─ Key: Speed of iteration > perfect architecture
+## Consequences
+What becomes easier or harder because of this change?
 
-├─ GROWING PRODUCT (10-50 engineers, scaling)
-│  ├─ Modular monolith or service-oriented
-│  ├─ Extract services at pain points
-│  ├─ Event-driven for cross-domain communication
-│  └─ Key: Clear domain boundaries, team autonomy
-
-├─ SCALE (50+ engineers, high traffic)
-│  ├─ Microservices with API gateway
-│  ├─ Event sourcing for complex domains
-│  ├─ CQRS for read/write optimization
-│  └─ Key: Independent deployability, observability
-
-└─ REAL-TIME (chat, collaboration, gaming)
-   ├─ WebSocket/SSE for live updates
-   ├─ Event-driven architecture
-   ├─ CRDT for conflict resolution
-   └─ Key: Eventual consistency, conflict handling
+## Alternatives Considered
+What other options did we evaluate and why did we reject them?
 ```
 
----
+## Architecture Layers
 
-## Architecture Components
+| Layer | Responsibility | Technology Choices |
+|-------|---------------|-------------------|
+| **Presentation** | UI, client-side logic | Next.js, React, mobile frameworks |
+| **API** | Request routing, validation, auth | REST, GraphQL, tRPC, gRPC |
+| **Business Logic** | Domain rules, workflows | Service layer, domain models |
+| **Data Access** | Database queries, caching | ORM/query builder, DAL pattern |
+| **Infrastructure** | Hosting, networking, storage | Cloud provider, CDN, object storage |
+| **Background** | Async tasks, scheduled jobs | Job queue, cron, event consumers |
+| **Observability** | Logging, monitoring, tracing | APM, error tracking, log aggregation |
 
-### Standard Web Application Stack
+## Scaling Checklist
 
-```
-Client → CDN → Load Balancer → App Servers → Database
-                    │                │
-                    └── Static Assets  └── Cache (Redis)
-                                       └── Background Jobs
-                                       └── File Storage (S3/R2)
-                                       └── Search (if needed)
-```
+- [ ] Stateless services (session stored externally)
+- [ ] Database connection pooling
+- [ ] CDN for static assets
+- [ ] Horizontal scaling capability
+- [ ] Rate limiting at API gateway
+- [ ] Caching strategy (application, CDN, database)
+- [ ] Background job queue for long operations
+- [ ] Health checks and readiness probes
+- [ ] Graceful shutdown handling
 
-### Key Design Decisions
+## Anti-Patterns to Avoid
 
-| Decision | Options | When to Choose |
-|----------|---------|---------------|
-| **Database** | PostgreSQL, MySQL, MongoDB | Postgres for most; Mongo for document-heavy |
-| **Cache** | Redis, Memcached | Redis for versatility, Memcached for simple caching |
-| **Queue** | Redis, SQS, RabbitMQ | Redis for simple; SQS for AWS; RabbitMQ for complex routing |
-| **File storage** | S3, R2, GCS | R2 for no egress fees; S3 for ecosystem |
-| **Search** | PostgreSQL FTS, Elasticsearch, Meilisearch | Postgres FTS first; dedicated search for complex needs |
-| **Real-time** | WebSocket, SSE, Polling | WebSocket for bidirectional; SSE for server-push; polling for simplicity |
+- **T1: Premature microservices** — Start with monolith. Extract services when team/scale demands it.
+- **T2: Shared database between services** — Each service owns its data. Communicate via APIs/events.
+- **T3: No separation of concerns** — Business logic in controllers, database queries in components.
+- **T4: Big bang architecture** — Design for current needs + 1 year. Don't over-architect.
 
-### Scaling Patterns
+## Quality Rubric (35 points)
 
-| Pattern | What It Solves | Implementation |
-|---------|---------------|----------------|
-| **Horizontal scaling** | More concurrent users | Stateless app servers behind load balancer |
-| **Read replicas** | Database read bottleneck | Route reads to replicas, writes to primary |
-| **Caching** | Repeated expensive queries | Cache-aside with Redis/Memcached |
-| **CDN** | Static asset delivery, global latency | CloudFront, Cloudflare |
-| **Background jobs** | Long-running operations | Trigger.dev, Bull, SQS workers |
-| **Connection pooling** | Database connection limits | PgBouncer, Supavisor |
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Fit to scale** | Architecture matches current and near-term scale | Somewhat appropriate | Over/under-architected |
+| **Separation of concerns** | Clear layers with defined boundaries | Some separation | Tangled responsibilities |
+| **Data design** | Normalized, indexed, with clear ownership | Reasonable schema | No data design |
+| **Scalability plan** | Identified bottlenecks with mitigation strategies | General scaling awareness | No scaling consideration |
+| **Failure handling** | Graceful degradation, circuit breakers, retries | Basic error handling | Fail-open or crash |
+| **Security** | Auth, authz, encryption, input validation at boundaries | Basic security | Security as afterthought |
+| **Documentation** | ADRs, diagrams, runbooks | Some documentation | No documentation |
 
----
-
-## Anti-Pattern References
-
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T1 | Premature microservices | Complexity without benefits |
-| T2 | No caching strategy | Database bottleneck |
-| T3 | Synchronous everything | Slow responses, cascading failures |
-
----
-
-## Quality Rubric
-
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Simplicity** | Over-engineered | Appropriate complexity | Simplest design that works |
-| **Scalability** | Single server, no plan | Horizontal scaling possible | Auto-scaling with clear bottleneck plan |
-| **Reliability** | Single points of failure | Basic redundancy | Fault-tolerant with graceful degradation |
-| **Observability** | No monitoring | Basic metrics + logs | Full observability (metrics, traces, logs) |
-| **Security** | No security design | Authentication + basic authorization | Defense in depth |
-| **Data** | No backup strategy | Automated backups | Backup + tested restore + replication |
-| **Documentation** | No diagrams | Architecture diagram | ADRs + diagrams + runbooks |
-
-**Score: /35. Ship at 28+.**
-
----
+**28+ = Production-ready architecture | 21-27 = Needs refinement | <21 = Fundamental issues**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Feeds into** | api-design | Architecture informs API structure |
-| **Feeds into** | database-schema | Architecture informs data model |
-| **Feeds into** | auth-design | Architecture informs auth approach |
-| **Review** | council-review (tech) | Validates architecture decisions |
-
----
-
-## Output Checklist
-
-- [ ] Architecture diagram with all components
-- [ ] Key design decisions documented with rationale
-- [ ] Non-functional requirements addressed (latency, availability, scale)
-- [ ] Data flow documented
-- [ ] Failure modes identified with mitigation
-- [ ] Deployment strategy defined
-- [ ] Migration path from current state (if applicable)
+- **Upstream:** `product-marketing-context` (requirements), `financial-model` (infra budget)
+- **Downstream:** All tech skills implement within this architecture
+- **Council:** Submit to `council-review` (tech council) for architecture review

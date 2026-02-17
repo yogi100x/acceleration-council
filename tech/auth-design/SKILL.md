@@ -1,138 +1,102 @@
----
-name: auth-design
-version: 2.0.0
-description: "When the user needs to design authentication and authorization systems. Also use when the user mentions 'authentication,' 'authorization,' 'auth design,' 'JWT,' 'OAuth,' 'SSO,' 'RBAC,' or 'session management.' This skill covers auth system design."
----
-
 # Auth Design
 
-You are an expert in authentication and authorization system design. Your goal is to create secure, usable auth systems.
-
----
+Design authentication and authorization systems that are secure, scalable, and user-friendly.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing auth patterns in the codebase
+2. Read `.claude/product-marketing-context.md` for user types and access requirements
+
+## Decision Tree: Auth Strategy
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ User types and roles
-  ├─ Auth requirements (SSO, MFA, etc.)
-  ├─ Current auth stack
-  └─ Compliance requirements
+What's your product type?
+├── Consumer app (B2C)
+│   └── Social login + email/password + magic link
+├── Business app (B2B)
+│   └── Email/password + SSO (SAML/OIDC) + MFA
+├── API / Developer platform
+│   └── API keys + OAuth 2.0 for third-party integrations
+├── Multi-tenant SaaS
+│   └── Per-tenant SSO + role-based access + organization management
+└── Internal tool
+    └── SSO via corporate identity provider
 ```
 
-**When to read:** Before every analysis. Working without context = generic advice.
+## Authentication Patterns
 
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Auth Approach
-
-```
-START: What auth do you need?
-
-├─ CONSUMER APP (B2C)
-│  ├─ Social login (Google, GitHub, etc.) + email/password
-│  ├─ Session-based auth (httpOnly cookies)
-│  └─ Optional MFA for security-conscious users
-
-├─ B2B SaaS
-│  ├─ Email/password + SSO (SAML/OIDC for enterprise)
-│  ├─ Organization-level RBAC
-│  ├─ MFA required for admin roles
-│  └─ API keys for integrations
-
-├─ API-ONLY (developer platform)
-│  ├─ API keys for server-to-server
-│  ├─ OAuth2 for user-context requests
-│  └─ JWT with short expiry + refresh tokens
-
-└─ INTERNAL TOOLS
-   ├─ SSO with corporate identity provider
-   ├─ Role-based access control
-   └─ Audit logging for all actions
-```
-
----
-
-## Auth Architecture
-
-### Authentication Methods
-
-| Method | Security | UX | Use Case |
+| Method | Security | UX | Best For |
 |--------|----------|-----|----------|
-| **Session cookies** | High (httpOnly, secure, sameSite) | Best | Web apps |
-| **JWT** | Medium (stateless, can't revoke easily) | Good | API + mobile |
-| **API keys** | Medium (long-lived, must rotate) | Simple | Server-to-server |
-| **OAuth2** | High (delegated, scoped) | Complex | Third-party integrations |
+| **Email + Password** | Medium (with MFA: High) | Familiar | Universal fallback |
+| **Magic Link** | High | Excellent | Low-friction apps |
+| **Social Login** | Depends on provider | Excellent | Consumer apps |
+| **SSO (SAML/OIDC)** | High | Good (for enterprise) | B2B, enterprise |
+| **API Key** | Medium | N/A (programmatic) | Developer APIs |
+| **OAuth 2.0** | High | Medium | Third-party integrations |
+| **Passkeys/WebAuthn** | Very High | Good | Security-first apps |
 
-### Authorization Patterns
+## Authorization Patterns
 
-| Pattern | How It Works | When to Use |
-|---------|-------------|-------------|
-| **RBAC** | Roles → Permissions → Resources | Most applications |
-| **ABAC** | Attributes (user, resource, env) → Policy | Complex, dynamic access |
-| **RLS** | Database-level row filtering | Multi-tenant data isolation |
-| **ACL** | Explicit user→resource grants | Shared resources (docs, files) |
+| Pattern | Complexity | Best For |
+|---------|-----------|----------|
+| **Role-Based (RBAC)** | Low | Most SaaS apps (admin, member, viewer) |
+| **Attribute-Based (ABAC)** | Medium | Complex rules (department + role + resource) |
+| **Row-Level Security (RLS)** | Medium | Multi-tenant database isolation |
+| **Permission-Based** | Medium | Granular feature access |
+| **Organization-Based** | Medium | Multi-tenant with team management |
 
-### Security Checklist
+## JWT Token Strategy
 
-| Control | Implementation |
-|---------|---------------|
-| Password hashing | bcrypt/argon2, min 12 rounds |
-| Rate limiting | Login attempts: 5/minute per IP + per account |
-| Session management | Secure cookies, rotation on auth, absolute timeout |
-| CSRF protection | SameSite cookies + CSRF token for forms |
-| XSS prevention | httpOnly cookies, CSP headers |
-| Token storage | Access token in memory, refresh in httpOnly cookie |
+```
+Access Token:
+- Short-lived (15-60 minutes)
+- Contains: user_id, role, organization_id
+- Stored: Memory (not localStorage)
+- Validated: On every API request
 
----
+Refresh Token:
+- Long-lived (7-30 days)
+- Contains: Minimal (session_id)
+- Stored: HttpOnly, Secure, SameSite cookie
+- Used: To get new access tokens
+- Rotated: On each use (detect reuse = compromise)
+```
 
-## Anti-Pattern References
+## Security Checklist
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T11 | JWT in localStorage | XSS can steal tokens |
-| T12 | No rate limiting on auth | Brute force attacks |
-| T13 | Overly permissive CORS | Cross-origin attacks |
+- [ ] Passwords hashed with bcrypt/argon2 (never MD5/SHA)
+- [ ] Rate limiting on login/signup endpoints
+- [ ] Account lockout after N failed attempts
+- [ ] CSRF protection on auth endpoints
+- [ ] Secure cookie flags (HttpOnly, Secure, SameSite)
+- [ ] Token rotation on privilege changes
+- [ ] Session invalidation on password change
+- [ ] MFA option for sensitive accounts
+- [ ] Audit logging of auth events
 
----
+## Anti-Patterns to Avoid
 
-## Quality Rubric
+- **T11: Storing JWTs in localStorage** — XSS can steal them. Use HttpOnly cookies.
+- **T12: No token refresh strategy** — Long-lived access tokens are a security risk.
+- **T13: Rolling your own auth** — Use battle-tested libraries (Supabase Auth, Auth.js, Clerk).
+- **T14: No audit logging** — Auth events must be logged for security investigation.
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Authentication** | Password only | + Social login | + SSO + MFA |
-| **Authorization** | No access control | Basic roles | RBAC + RLS + attribute-based |
-| **Token security** | Tokens in localStorage | Secure cookies | httpOnly + short-lived + rotation |
-| **Rate limiting** | None | Basic IP limiting | Per-account + per-IP + adaptive |
-| **Session management** | No timeout | Fixed timeout | Absolute + idle timeout + rotation |
-| **Audit** | No logging | Auth events logged | Full audit trail with IP, device, action |
-| **Recovery** | No reset flow | Email reset | Email reset + MFA recovery + admin override |
+## Quality Rubric (35 points)
 
-**Score: /35. Ship at 28+.**
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Authentication methods** | Appropriate methods for user types with MFA | Basic email/password | Single method, no MFA |
+| **Authorization model** | RBAC/ABAC with RLS, tested edge cases | Basic role checks | No authorization model |
+| **Token management** | Short-lived tokens, rotation, secure storage | Reasonable token strategy | Long-lived tokens in localStorage |
+| **Session security** | CSRF protection, secure cookies, invalidation | Some protections | Minimal security |
+| **Multi-tenancy** | Proper tenant isolation at every layer | Mostly isolated | Isolation gaps |
+| **Audit trail** | All auth events logged with context | Login/logout logged | No logging |
+| **Recovery flows** | Password reset, account recovery, locked account | Basic reset | No recovery |
 
----
+**28+ = Secure auth system | 21-27 = Needs hardening | <21 = Security risk**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | system-architecture | Architecture informs auth approach |
-| **Parallel** | security-hardening | Auth is core security component |
-| **Review** | council-review (tech) | Validates auth design |
-
----
-
-## Output Checklist
-
-- [ ] Authentication methods selected (email, social, SSO)
-- [ ] Authorization model designed (RBAC, ABAC, RLS)
-- [ ] Token/session strategy secure (no localStorage JWTs)
-- [ ] Rate limiting on authentication endpoints
-- [ ] Password policy defined
-- [ ] Session management with timeouts
-- [ ] Account recovery flow designed
-- [ ] Audit logging for auth events
+- **Upstream:** `system-architecture` (auth layer), `security-hardening` (security requirements)
+- **Downstream:** `api-design` (auth middleware), `testing-strategy` (auth test cases)
+- **Council:** Submit to `council-review` for security review

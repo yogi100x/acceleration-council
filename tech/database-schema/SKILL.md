@@ -1,140 +1,114 @@
----
-name: database-schema
-version: 2.0.0
-description: "When the user needs to design database schemas, tables, or data models. Also use when the user mentions 'database schema,' 'data model,' 'table design,' 'migration,' 'normalization,' or 'entity relationship.' This skill covers database schema design."
----
+# Database Schema
 
-# Database Schema Design
-
-You are an expert in database schema design. Your goal is to create schemas that are normalized, performant, and evolvable.
-
----
+Design normalized, performant database schemas with proper indexing and constraints.
 
 ## Context Sync Protocol
 
-Before starting, sync with project context:
+1. Read existing database schema and conventions
+2. Read `.claude/product-marketing-context.md` for data requirements
+
+## Decision Tree: Database Choice
 
 ```
-Read: .claude/tech-context.md (if exists)
-  ├─ Database engine (PostgreSQL, MySQL, etc.)
-  ├─ ORM or query builder
-  ├─ Access patterns (read-heavy, write-heavy)
-  └─ Scale expectations
+What's your data model?
+├── Relational (structured, joins needed)
+│   └── PostgreSQL (most versatile, JSONB for semi-structured)
+├── Document (flexible schema, nested objects)
+│   └── MongoDB or PostgreSQL JSONB columns
+├── Key-value (simple lookups, caching)
+│   └── Redis, DynamoDB
+├── Time-series (events, metrics, logs)
+│   └── TimescaleDB (PostgreSQL extension) or InfluxDB
+├── Graph (relationships are the data)
+│   └── Neo4j, or PostgreSQL with recursive CTEs
+└── Search (full-text, faceted)
+    └── Elasticsearch, or PostgreSQL full-text search
 ```
-
-**When to read:** Before every analysis. Working without context = generic advice.
-
-**If files missing:** Prompt user to run the setup skill first or gather context manually.
-
----
-
-## Decision Tree: Schema Approach
-
-```
-START: What's the primary access pattern?
-
-├─ TRANSACTIONAL (CRUD, business logic)
-│  ├─ Normalized schema (3NF)
-│  ├─ Foreign keys with referential integrity
-│  ├─ Indexes on query patterns
-│  └─ Key: Consistency over read speed
-
-├─ READ-HEAVY (dashboards, reporting)
-│  ├─ Denormalize for common queries
-│  ├─ Materialized views for aggregations
-│  ├─ Indexes optimized for read patterns
-│  └─ Key: Read speed over write complexity
-
-├─ FLEXIBLE SCHEMA (varying attributes)
-│  ├─ JSONB columns for variable data
-│  ├─ EAV pattern for truly dynamic attributes
-│  └─ Key: Query-ability of flexible data
-
-└─ TIME-SERIES (events, logs, metrics)
-   ├─ Partitioned by time
-   ├─ Append-only with retention policy
-   └─ Key: Write throughput, range queries
-```
-
----
 
 ## Schema Design Principles
 
-| Principle | Implementation |
-|-----------|---------------|
-| **Normalize first** | 3NF baseline, denormalize with evidence |
-| **Explicit relationships** | Foreign keys with ON DELETE/UPDATE actions |
-| **Appropriate types** | Use UUID for IDs, timestamptz for dates, JSONB for flexible data |
-| **Index strategy** | Index based on actual query patterns, not guesses |
-| **Soft deletes** | `deleted_at` timestamp, filter in application |
-| **Audit columns** | `created_at`, `updated_at` on every table |
-| **Enum vs lookup table** | Postgres ENUM for <10 stable values; lookup table for dynamic |
+### Normalization Guidelines
+```
+Start at 3NF (Third Normal Form):
+- 1NF: No repeating groups, atomic values
+- 2NF: No partial dependencies on composite keys
+- 3NF: No transitive dependencies
 
-### Common Patterns
+Denormalize strategically:
+- Materialized views for read-heavy queries
+- JSONB columns for flexible/nested data
+- Computed columns for frequently calculated values
+- Only when query performance demands it with profiling evidence
+```
 
-| Pattern | When to Use | Implementation |
-|---------|-------------|----------------|
-| **UUID primary keys** | Distributed systems, API exposure | `gen_random_uuid()` |
-| **Polymorphic relations** | Multiple types share a table | `type` column + JSONB or separate tables |
-| **Temporal tables** | Track changes over time | `valid_from`/`valid_to` columns |
-| **Row-level security** | Multi-tenant, per-user access | RLS policies on tenant_id/user_id |
-| **JSONB columns** | Semi-structured data, metadata | Indexed with GIN for queries |
+### Naming Conventions
 
-### Migration Best Practices
+| Element | Convention | Example |
+|---------|-----------|---------|
+| Tables | snake_case, plural | `candidate_profiles` |
+| Columns | snake_case | `created_at`, `first_name` |
+| Primary key | `id` (UUID preferred) | `id UUID DEFAULT gen_random_uuid()` |
+| Foreign key | `referenced_table_singular_id` | `organization_id` |
+| Boolean | `is_` or `has_` prefix | `is_active`, `has_verified` |
+| Timestamps | `_at` suffix | `created_at`, `updated_at` |
+| Enums | snake_case | `assessment_status` |
+| Indexes | `idx_table_columns` | `idx_candidates_email` |
 
-| Rule | Reason |
-|------|--------|
-| Migrations are forward-only | Never modify past migrations |
-| One concern per migration | Easier to debug and rollback |
-| Backward-compatible changes | Deploy migration before code that uses it |
-| Test with production-like data | Small datasets hide performance issues |
-| Include rollback plan | Document how to undo each migration |
+### Essential Patterns
 
----
+```sql
+-- Every table should have:
+CREATE TABLE resources (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- ... columns
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
-## Anti-Pattern References
+-- Auto-update updated_at
+CREATE TRIGGER set_updated_at
+  BEFORE UPDATE ON resources
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
-| ID | Anti-Pattern | Impact |
-|----|-------------|--------|
-| T7 | No foreign keys | Data integrity violations |
-| T8 | Missing indexes | Slow queries at scale |
-| T9 | VARCHAR for everything | Type safety lost, storage waste |
+-- Soft delete (when needed)
+ALTER TABLE resources ADD COLUMN deleted_at TIMESTAMPTZ;
+CREATE INDEX idx_resources_active ON resources (id) WHERE deleted_at IS NULL;
+```
 
----
+### Indexing Strategy
 
-## Quality Rubric
+| Index Type | When | Example |
+|-----------|------|---------|
+| **B-tree** (default) | Equality, range, sorting | `CREATE INDEX idx_users_email ON users(email)` |
+| **Partial** | Filtering on subset | `CREATE INDEX idx_active ON users(id) WHERE is_active = true` |
+| **Composite** | Multi-column queries | `CREATE INDEX idx_attempts ON attempts(user_id, assessment_id)` |
+| **GIN** | JSONB, array, full-text | `CREATE INDEX idx_skills ON profiles USING GIN(skills)` |
+| **Unique** | Enforce uniqueness | `CREATE UNIQUE INDEX idx_email ON users(email)` |
 
-| Dimension | 1 | 3 | 5 |
-|-----------|---|---|---|
-| **Normalization** | Flat tables | Partially normalized | 3NF with intentional denormalization |
-| **Integrity** | No constraints | Some foreign keys | FK + check constraints + triggers |
-| **Indexing** | No indexes | Primary key only | Query-pattern-driven indexes |
-| **Types** | VARCHAR everything | Appropriate types | Optimized types with constraints |
-| **Migrations** | Ad hoc DDL | Sequential migrations | Tested, backward-compatible, documented |
-| **Security** | No RLS | Basic RLS | Comprehensive RLS per entity |
-| **Documentation** | No ERD | Basic ERD | ERD + data dictionary + access patterns |
+## Anti-Patterns to Avoid
 
-**Score: /35. Ship at 28+.**
+- **T2: No foreign key constraints** — Enforce referential integrity at the database level.
+- **T5: EAV (Entity-Attribute-Value) pattern** — Use JSONB columns instead.
+- **T9: No indexes on foreign keys** — Every FK column should be indexed for JOIN performance.
+- **T10: UUID as primary key without b-tree consideration** — UUIDv7 is ordered; prefer over UUIDv4 for index performance.
 
----
+## Quality Rubric (35 points)
+
+| Dimension | 5 pts | 3 pts | 1 pt |
+|-----------|-------|-------|------|
+| **Normalization** | 3NF with strategic denormalization documented | Mostly normalized | Significant redundancy |
+| **Constraints** | PKs, FKs, unique, check constraints, not-null | PKs and FKs | PKs only |
+| **Indexing** | Query-driven indexes with partial and composite | Basic indexes | No indexes beyond PK |
+| **Naming** | Consistent conventions throughout | Mostly consistent | Inconsistent |
+| **Migration safety** | Non-breaking migrations, backfill strategy | Basic migrations | Ad-hoc schema changes |
+| **Data types** | Appropriate types (timestamptz, UUID, enum) | Mostly appropriate | Strings for everything |
+| **Documentation** | Schema diagram, column descriptions, relationship docs | Some documentation | No documentation |
+
+**28+ = Production-ready schema | 21-27 = Needs review | <21 = Data integrity risk**
 
 ## Cross-Skill References
 
-| Relationship | Skill | Connection |
-|-------------|-------|-----------|
-| **Depends on** | system-architecture | Architecture determines data model |
-| **Feeds into** | data-migration | Schema changes require migrations |
-| **Parallel** | auth-design | Auth informs RLS and ownership |
-| **Review** | council-review (tech) | Validates schema design |
-
----
-
-## Output Checklist
-
-- [ ] Entity-relationship diagram created
-- [ ] Tables normalized to 3NF (denormalization justified)
-- [ ] Foreign keys with appropriate ON DELETE actions
-- [ ] Indexes aligned with query patterns
-- [ ] Audit columns on all tables (created_at, updated_at)
-- [ ] RLS policies designed (if multi-tenant)
-- [ ] Migration plan with rollback strategy
+- **Upstream:** `system-architecture` (data layer design)
+- **Downstream:** `data-migration` (schema changes), `performance-optimization` (query tuning)
+- **Council:** Submit to `council-review` for schema review
