@@ -48,15 +48,23 @@ cp -r acceleration-council/marketing/ .claude/skills/
 cp -r acceleration-council/* .claude/skills/
 ```
 
-Then run the **setup skill** to generate context files:
+Then generate your project context files. In Claude Code, type:
 
 ```
-.claude/context/product-marketing.md
-.claude/context/finance.md
-.claude/context/legal.md
-.claude/context/ai.md
-.claude/context/tech.md
+/setup
 ```
+
+This will ask you about your product, business model, and stack, then generate 5 context files that all skills read automatically:
+
+```
+.claude/product-marketing-context.md
+.claude/finance-context.md
+.claude/legal-context.md
+.claude/ai-context.md
+.claude/tech-context.md
+```
+
+> **Note:** `/setup` is a Claude Code slash command, not a terminal command. Run it inside a Claude Code conversation after installing the skills.
 
 ---
 
